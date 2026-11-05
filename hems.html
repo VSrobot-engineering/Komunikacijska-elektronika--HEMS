@@ -238,6 +238,34 @@ table.cmp td.worse { color: var(--bad); }
 .modinfo .eq { font-family: "Cambria Math", "Times New Roman", serif; font-size: 14px; background: var(--surface-2); padding: 6px 10px; border-radius: 6px; margin: 5px 0; overflow-x: auto; }
 .modinfo .src { font-size: 12px; }
 
+/* ---------- skrivljiv panel z razlago ---------- */
+.layout.drawer-open { grid-template-columns: 340px minmax(0, 1fr) 420px; }
+.drawer { display: none; position: sticky; top: 57px; height: calc(100vh - 57px); overflow-y: auto; background: var(--surface-1); border-left: 1px solid var(--border); padding: 0 16px 30px; }
+.layout.drawer-open .drawer { display: block; }
+@media (max-width: 1280px) {
+  .layout.drawer-open { grid-template-columns: 340px minmax(0, 1fr); }
+  .layout.drawer-open .drawer { position: fixed; right: 0; top: 57px; width: min(420px, 92vw); z-index: 30; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
+}
+.drawer-head { position: sticky; top: 0; background: var(--surface-1); display: flex; align-items: center; gap: 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; z-index: 2; }
+.dtabs { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.dtab { border: 0; background: var(--surface-1); padding: 6px 11px; cursor: pointer; color: var(--text-secondary); font-size: 12.5px; }
+.dtab + .dtab { border-left: 1px solid var(--border); }
+.dtab.active { background: var(--text-primary); color: #fff; }
+.dclose { margin-left: auto; border: 1px solid var(--border); background: var(--surface-1); border-radius: 8px; width: 30px; height: 30px; font-size: 18px; line-height: 1; cursor: pointer; color: var(--text-secondary); }
+.dclose:hover { background: var(--surface-2); }
+.drawer .explain-now { margin-top: 0; }
+.drawer .modinfo .mi-grid { grid-template-columns: 1fr; gap: 6px; }
+.drawer .modinfo > header { margin-bottom: 6px; }
+.drawer .modinfo > header h2 { font-size: 15px; }
+.drawer-toggle { position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 25; writing-mode: vertical-rl; border: 1px solid var(--text-primary); border-right: 0; background: var(--text-primary); color: #fff; padding: 14px 7px; border-radius: 8px 0 0 8px; cursor: pointer; font-size: 13px; letter-spacing: .03em; }
+.drawer-toggle:hover { background: #333; }
+.drawer-toggle.hidden { display: none; }
+.layout.drawer-open .scene-wrap { grid-template-columns: 1fr; }
+.layout.drawer-open .live { flex-direction: row; flex-wrap: wrap; }
+.layout.drawer-open .live .lv { flex: 1 1 140px; }
+.layout.drawer-open .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.layout.drawer-open .charts, .layout.drawer-open .cmpgrid, .layout.drawer-open .checks { grid-template-columns: 1fr; }
+
 </style>
 </head>
 <body>
@@ -274,10 +302,7 @@ table.cmp td.worse { color: var(--bad); }
     <section class="card scene-card">
       <header><h2>Pametni dom v živo</h2><span class="sub">pike na žicah prikazujejo smer in velikost toka moči (debelejša in hitrejša = večja moč) · parametre spreminjajte v levem panelu</span></header>
       <div class="scene-wrap"><div id="scene"></div><div class="live" id="live"></div></div>
-      <div class="explain-now" id="explainNow" aria-live="polite"></div>
     </section>
-
-    <section class="card modinfo" id="modInfo"></section>
 
     <section class="card">
       <header><h2>Dnevni kazalniki</h2><span class="sub" id="kpiSub"></span></header>
@@ -312,7 +337,21 @@ table.cmp td.worse { color: var(--bad); }
 
     <section class="card docs" id="docs"></section>
   </main>
+
+  <aside class="drawer" id="drawer" aria-label="Razlaga">
+    <div class="drawer-head">
+      <div class="dtabs" role="tablist">
+        <button type="button" role="tab" class="dtab active" data-pane="paneNow" id="tabNow">Kaj se dogaja zdaj</button>
+        <button type="button" role="tab" class="dtab" data-pane="paneMod" id="tabMod">Razlaga modula</button>
+      </div>
+      <button type="button" class="dclose" id="drawerClose" title="Skrij razlago" aria-label="Skrij razlago">×</button>
+    </div>
+    <div class="dpane" id="paneNow"><div class="explain-now" id="explainNow" aria-live="polite"></div>
+      <p class="note">Razlaga se posodobi ob vsakem koraku simulacije in ob vsaki spremembi parametrov.</p></div>
+    <div class="dpane" id="paneMod" hidden><div class="modinfo" id="modInfo"></div></div>
+  </aside>
 </div>
+<button type="button" class="drawer-toggle" id="drawerToggle" aria-controls="drawer">Razlaga ‹</button>
 
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="box">
@@ -1742,7 +1781,7 @@ table.cmp td.worse { color: var(--bad); }
         <tr><td>Porabljena energija</td><td>${fmt(K.Eload)} kWh</td></tr>
         <tr><td>Uvožena / izvožena energija</td><td>${fmt(K.Eimp)} / ${fmt(K.Eexp)} kWh</td></tr>
         <tr><td>Polnjenje / praznjenje baterije</td><td>${fmt(K.Ech)} / ${fmt(K.Edis)} kWh</td></tr>
-        <tr><td>Strošek nakupa − prihodek oddaje</td><td>${fmt(K.costImp)} − ${fmt(K.revExp)} = <b>${fmt(K.cost)} €</b></td></tr>
+        <tr><td>Prihodek oddaje − strošek nakupa<br><span class="note">pozitivno = dobiček, negativno = strošek</span></td><td>${fmt(K.revExp)} − ${fmt(K.costImp)} = <b>${fmt(K.revExp - K.costImp)} €</b></td></tr>
         <tr><td>Lastna poraba PV / samooskrba</td><td>${pct(K.selfCons)} / ${pct(K.selfSuff)}</td></tr>
         <tr><td><b>Dnevna energijska bilanca</b><br><span class="note">E_PV − E_omej + E_uvoz + E_praz = E_poraba + E_pol + E_izvoz</span></td><td>${fmt(balPV, 3)} = ${fmt(balUse, 3)} kWh</td></tr>
       </tbody></table>
@@ -1811,6 +1850,11 @@ table.cmp td.worse { color: var(--bad); }
   function init() {
     window.HouseScene.build($('scene'));
     renderDocs();
+    let dOpen = true; try { dOpen = localStorage.getItem('hems_drawer') !== '0'; } catch (e) { /* ni shrambe */ }
+    setDrawer(dOpen);
+    $('drawerToggle').addEventListener('click', () => setDrawer(true));
+    $('drawerClose').addEventListener('click', () => setDrawer(false));
+    document.querySelectorAll('.dtab').forEach((b) => b.addEventListener('click', () => setPane(b.dataset.pane)));
     $('dt').value = String(state.p.dt);
     $('modeA').addEventListener('click', () => setMode('A'));
     $('modeB').addEventListener('click', () => setMode('B'));
@@ -1852,6 +1896,17 @@ table.cmp td.worse { color: var(--bad); }
           <h3>Vprašanja za razumevanje</h3><ul>${I.vprasanja.map((x) => `<li>${x}</li>`).join('')}</ul></div>
       </div>`;
   }
+  function setDrawer(open) {
+    document.querySelector('.layout').classList.toggle('drawer-open', open);
+    $('drawerToggle').classList.toggle('hidden', open);
+    $('drawerToggle').setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem('hems_drawer', open ? '1' : '0'); } catch (e) { /* ni shrambe */ }
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
+  }
+  function setPane(id) {
+    document.querySelectorAll('.dtab').forEach((b) => b.classList.toggle('active', b.dataset.pane === id));
+    ['paneNow', 'paneMod'].forEach((p) => { $(p).hidden = p !== id; });
+  }
   function switchModule(id, initial) {
     if (!initial) state.modParams[state.module] = H.clone(state.p);
     const dt = state.p.dt;
@@ -1871,7 +1926,7 @@ table.cmp td.worse { color: var(--bad); }
     $('modeA').classList.toggle('active', m === 'A'); $('modeB').classList.toggle('active', m === 'B');
     renderStatic(); renderStep();
   }
-  window.HEMS_APP = { state, recompute, setMode, seek, showSummary, switchModule };
+  window.HEMS_APP = { state, recompute, setMode, seek, showSummary, switchModule, setDrawer, setPane };
   init();
 })();
 
