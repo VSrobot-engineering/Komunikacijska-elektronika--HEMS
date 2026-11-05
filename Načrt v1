@@ -1,0 +1,72 @@
+https://vsrobot-engineering.github.io/Komunikacijska-elektronika--HEMS/hems.html#modul=1
+
+HEMS kot osrednji gradnik pametnega doma – razlaga konceptov
+
+Oznake virov: [B] E. Bertè, Demand Response of a Household with Distributed Energy Resources, Politecnico di Torino & Aalto, 2024; [G] T. Safabakhsh, Integrating Renewable Energy Sources and Demand Response in Home Energy Management: A MILP Model, Univerza v Genovi, 2025.
+
+1. Prosumer in vloga HEMS
+
+Prosumer je odjemalec, ki namesti lastno mikroproizvodnjo (običajno nekaj kilovatov) za pokrivanje svoje porabe in presežke prodaja v omrežje, zato je hkrati proizvajalec in porabnik [B, pogl. 2.1]. Razvoj gre od načela »proizvodnja sledi porabi« k načelu »poraba sledi proizvodnji«, ki ga omogočajo pametni števci in dvosmerna komunikacija [B].
+Sistem za upravljanje energije v domu (HEMS) je osrednja odločevalna enota pametnega doma. Kot vhode prejme cene elektrike, napoved proizvodnje PV, vremensko napoved (vpliva na toplotne potrebe in proizvodnjo) ter profile fiksnih in prilagodljivih porabnikov. Kot izhode pošilja krmilne signale baterijskemu hranilniku, toplotni črpalki in električnemu vozilu ter urnike prilagodljivih porabnikov [G, pogl. 3.1]. Cilj je stalno uravnotežiti ponudbo in povpraševanje v gospodinjstvu, znižati stroške in povečati lastno porabo obnovljive energije [G].
+HEMS izvaja odziv odjema (DR). To je sprememba porabe kot odziv na tržni signal, npr. spremembo cene ali finančno spodbudo, da se poraba zmanjša, poveča ali časovno premakne [B, po ACER]. DR je lahko spodbujevalni (bolj za industrijo) ali cenovni (pogost pri gospodinjstvih) [B]. Pri prosumerju HEMS tako odloča o štirih tokovih: koliko PV-energije porabiti takoj, koliko shraniti, koliko oddati in koliko kupiti.
+Primerjava odjemalca in prosumerja. Odjemalec (consumer) je pasiven: vso energijo kupi iz omrežja takrat, ko jo potrebuje, in nanj vpliva le cena. Prosumer ima lastno proizvodnjo in pogosto hranilnik, zato lahko energijo proizvaja, shranjuje, porablja in oddaja; s HEMS tudi premika porabo.
+
+| Značilnost                            | Odjemalec (consumer) | Prosumer s HEMS                                            |
+| ------------------------------------- | -------------------- | ---------------------------------------------------------- |
+| Vir energije                          | samo omrežje         | PV, baterija, omrežje                                      |
+| Smer toka na priključku               | samo uvoz            | uvoz in izvoz                                              |
+| Vloga porabe                          | poraba ne sledi ceni | poraba sledi proizvodnji in ceni (odziv odjema)            |
+| Odločitve                             | koliko porabiti      | porabiti, shraniti, oddati ali kupiti                      |
+| Začetna naložba v [B]                 | 0 €                  | 26 650 € (PV 5 kWp, baterija 13,5 kWh, toplotni hranilnik) |
+| Letni neto strošek v [B] (2022)       | 3117,94 €            | 988,72 €                                                   |
+| Kumulativni strošek po 20 letih v [B] | 49 505 €             | 42 348 €                                                   |
+
+V [B] imata obe konfiguraciji enake porabnike (odjemalec nima PV in hranilnikov). Prosumer ima nižji letni strošek, vendar ga dražja začetna naložba bremeni še dolgo: kumulativni strošek odjemalca preseže strošek prosumerja šele med 16. in 20. letom [B, pogl. 5.2.2, tab. 5.3, 5.4, B-1]. Za omrežje je prosumer zahtevnejši, ker tok teče v obe smeri in ker lahko več prosumerjev hkrati premakne porabo v isto uro [B, pogl. 5.3].
+
+2. Pristopi k upravljanju energije
+
+Starejši sistemi so delovali po pravilih: fiksni urniki in pragovi vklopa. So preprosti, a se ne prilagajajo spremenljivim cenam, nepredvidljivi proizvodnji OVE in nihanju porabe, zato pogosto vodijo v nepotrebno porabo ali slabše udobje [G, pogl. 1.2.1]. Z več viri, hranilniki in vozili so se uveljavile optimizacijske metode, ki problem zapišejo kot kriterijsko funkcijo z omejitvami [G]:
+
+- Stohastična optimizacija eksplicitno upošteva negotovost (scenariji proizvodnje in porabe), vendar je računsko zahtevna.
+- Hevristike in metahevristike (genetski algoritmi, roj delcev, simulirano ohlajanje) hitro najdejo dobre rešitve, a ne zagotavljajo globalnega optimuma in so občutljive na nastavitve.
+- MILP (mešano celoštevilsko linearno programiranje) hkrati zajame zvezne odločitve (moči, stanje napolnjenosti) in diskretne odločitve (vklop/izklop, polnjenje ali praznjenje). Njegova slabost je čas računanja, ki hitro raste s številom spremenljivk [G, pogl. 1.2.1].
+
+[B] navaja, da je MILP v energetiki vse bolj razširjen, ker zagotavlja globalno optimalnost rešitve, in da je hitrost reševanja odvisna od kakovosti formulacije; pri počasnem reševalniku GLPK predlaga CBC, CPLEX ali Gurobi [B, pogl. 2]. Obe nalogi zato HEMS formulirata kot MILP: [B] v Pythonu (Pyomo + GLPK), [G] v MATLAB-u (YALMIP).
+
+3. Gradniki sistema in njihovi modeli
+
+Fotovoltaika (PV). [B] izračuna moč iz obsevanja, kratkostičnega toka in temperature celice (en. 3.2–3.3), nato profil normira v sistem p.u. (vrednosti 0–1) in ga pomnoži z nazivno močjo; velikost elektrarne tako spremeni en sam parameter. [G] namesto modela uporabi izmerjeno proizvodnjo elektrarne 80,64 kW in jo skalira na 2,25 kW.
+Baterijski hranilnik (BESS). Stanje napolnjenosti (SOC) se v vsakem koraku spremeni za shranjeno energijo, zmanjšano za izgube [B, en. 3.7; G, en. 3.12]:
+
+$$SOC_h = SOC_{h-1} + \varepsilon_c P^{ch}_h \Delta h - \frac{P^{dch}_h}{\varepsilon_d} \Delta h$$
+
+Binarni spremenljivki preprečita hkratno polnjenje in praznjenje (bᶜʰ + bᵈᶜʰ ≤ 1). SOC je omejen (v [B] na 20–80 % zaradi življenjske dobe), končni SOC pa je enak začetnemu, sicer bi model začetno energijo obravnaval kot »brezplačno« [B, en. 3.9]. [G] doda zmanjševanje moči polnjenja nad 90 % SOC, prepoved oddaje energije iz baterije v omrežje in zahtevo, da je baterija ob 18.00 vsaj 80 % polna.
+Omrežje in tarife. Prosumer kupuje po ceni Day-Ahead z dodatkom za omrežnino in davčine ter prodaja po ceni Day-Ahead, zmanjšani za majhen odbitek [B, pogl. 3.1.4]; [G] uporabi tarifne bloke F1–F3 z nakupno ceno 0,27–0,37 €/kWh in odkupno 0,11–0,13 €/kWh. Moč izmenjave je omejena s priključkom (3 × 25 A ≈ 16 kW v [B], 6 kW v [G]), binarne spremenljivke pa preprečijo hkraten nakup in prodajo [G, en. 3.50].
+Gospodinjski porabniki. [G] loči fiksne porabnike (hladilnik, zamrzovalnik, štedilnik, pečica, TV, razsvetljava) in pametne, ki imajo izmerjen profil in jih je mogoče premakniti v uporabniško določeno okno (pralni stroj, delo na računalniku, igranje). Pametni porabnik se mora nepretrgano izvesti natanko enkrat, kar zagotovi binarna spremenljivka začetka in matrika profila [G, en. 3.51–3.55].
+Toplotna črpalka in stavba. Električna moč je toplotna moč, deljena s COP, ki je odvisen od zunanje temperature: eksponentno v [B] (COP = 3,45·e^(0,03·T_zun)) in linearno v [G]. Notranjo temperaturo opisuje termični model stavbe – dvokapacitivni (zrak in masa stavbe) v [B] ter enokapacitivni 1R1C v [G]. Temperatura mora ostati v pasu udobja, zato je toplotna vztrajnost stavbe vir prilagodljivosti.
+Električni bojler in topla voda. [B] modelira temperaturo 200-litrskega hranilnika z upoštevanjem porabe vode, dotoka hladne vode in toplotnih izgub; temperatura mora ostati med 58 in 60 °C zaradi legionele [B, en. 3.19–3.21]. V [G] toplo vodo delno pokrivajo sončni kolektorji (pozimi 52 %, poleti 100 %), preostanek toplotna črpalka.
+Električno vozilo (EV). Polni se lahko le, ko je priključeno. Ob odhodu mora imeti zahtevani SOC: v [B] največjega dovoljenega, v [G] 85 % ob 8.15. V obeh nalogah lahko vozilo tudi oddaja energijo hiši, v [G] kot V2H.
+
+4. Energijska bilanca, časovni profili in MILP-model
+
+Energijska bilanca v vozlišču priključka mora veljati v vsakem koraku: vsota proizvodnje PV, praznjenja hranilnikov in uvoza je enaka vsoti polnjenja hranilnikov, porabe vseh naprav in izvoza [B, en. 3.40]. Če bilanca v enem samem koraku ni izpolnjena, rešitev ne obstaja (problem je neizvedljiv) [B].
+Časovni profili. Vsi vhodi (proizvodnja, poraba, cene) so podani v diskretnih korakih: [B] uporablja urni korak in podatke za celo leto 2022, [G] pa tipičen januarski in julijski dan pri koraku 1 min in 15 min. Pri koraku 1 min so odločitve natančnejše, zlasti zgodaj zjutraj in pozno zvečer, vendar daljši čas računanja otežuje delovanje v realnem času [G, pogl. 5].
+Odločitvene spremenljivke so moči nakupa in prodaje, moči polnjenja in praznjenja baterije in EV, SOC, moč toplotne črpalke, temperature (stavbe, vode) ter binarne spremenljivke stanj in začetkov pametnih porabnikov [G, pogl. 3.4].
+Kriterijska funkcija v [B] minimizira razliko med stroškom uvožene in prihodkom izvožene energije:
+
+$$\min \sum_{h \in H} \left[ P_{imp,h}\,(DA_{p,h} + c^{imp}) - P_{exp,h}\,(DA_{p,h} - c^{exp}) \right]$$
+
+
+[G] doda člen α·Σ(T_b − T*), ki kaznuje odmik notranje temperature od želene in tako uravnava razmerje med stroškom in udobjem [G, en. 3.60].
+Omejitve zajemajo bilanco, enačbe SOC, meje moči in SOC, pas udobja, zahteve EV in pametnih porabnikov ter izključnost (ni hkratnega nakupa in prodaje, polnjenja in praznjenja). [G] doda še minimalni čas vklopa 15 min za toplotno črpalko, baterijo in EV [G, en. 3.58–3.59]. Nelinearne člene, npr. absolutno vrednost moči ogrevanja/hlajenja, [B] linearizira z dvema pozitivnima pomožnima spremenljivkama in binarnima spremenljivkama [B, en. 3.35–3.39]; tako prvotni MINLP preoblikuje v MILP, ki ga reševalnik reši do globalnega optimuma.
+
+5. Praktični prikaz in vrednotenje
+
+Kako HEMS deluje v praksi. V [G] poleti PV podnevi v celoti pokrije porabo, presežek pa polni baterijo; baterijo nato zgodaj zjutraj izkoristi za polnjenje EV, ker ve, da jo bo PV naslednji dan znova napolnila. Pozimi PV ne zadostuje, zato HEMS baterijo polni zgodaj zjutraj ob nizki ceni in jo prazni zvečer, ko je cena (blok F2) najvišja. Pralni stroj prestavi v večer, ko porabo pokrivata baterija in EV [G, pogl. 5.1]. [B] na treh majskih dneh primerja neoptimizirano in optimizirano delovanje: z odzivom odjema se krivulja porabe približa krivulji proizvodnje, vozilo se prazni le, ko to zniža strošek, uvoz pa poteka ob nizkih cenah [B, pogl. 4.2.3]. V seminarju te mehanizme prikaže interaktivni prototip z načinom po pravilih in pametnim načinom [P].
+Kazalniki. Glavni kazalnik je neto strošek (nakup − prodaja). [B] uporablja še indeks ujemanja porabe (LMI), povprečje razmerja med proizvodnjo OVE z izravnavo hranilnikov in porabo, omejeno na 1 v vsaki uri [B, en. 3.41]. Sorodna sta delež lastne porabe PV in stopnja samooskrbe [P].
+Rezultati virov. V [B] optimizacija v treh majskih dneh zniža neto strošek z 12,90 € na 2,03 €, LMI pa zviša s 36 % na 59 %. Letni neto strošek osnovnega primera je 988,72 €, primera brez hranilnikov in odziva odjema 2483,52 €, odjemalca brez PV in hranilnikov 3117,94 €, primera z 10 kWp in 16 kWh pa 157,60 €. Večja elektrarna in hranilnik torej znižata obratovalni strošek, vendar zahtevata večjo začetno naložbo [B, pogl. 5.2.2]. Manjša priključna moč zmanjša izmenjavo z omrežjem in poveča strošek, bolj prilagodljiv uporabnik pa jo lažje prenese [B, pogl. 5.3]. V [G] tipičen julijski dan stane 8,36 € (30,8 kWh nakupa), januarski pa 13,3 € (48,9 kWh), kar je približno 59 % več [G, tab. 5.3].
+Omejitve modelov. Obe nalogi predpostavljata popolno poznavanje proizvodnje, cen in porabe (napovedi ni). Modeli toplotne črpalke, kolektorjev in stavbe so poenostavljeni, čas računanja pri koraku 1 min pa otežuje uporabo v realnem času [G, pogl. 5.2]. [B] dodaja, da so vožnje EV in poraba tople vode poenostavljeno enake vsak dan, da je model vezan na finsko podnebje, da uporabnik ne sodeluje v energetski skupnosti in da je edini OVE fotovoltaika [B, pogl. 4.3]. Poleg tega je to, kar je optimalno za posameznika, lahko neugodno za lokalno distribucijsko omrežje, če več gospodinjstev hkrati premakne porabo v isto uro [B, pogl. 5.3].
+Nadaljnji razvoj. Viri predlagajo napovedovanje PV, porabe in cen s strojnim učenjem, spodbujevalno učenje za odločanje ter preizkus na realni hiši [G, pogl. 5.3; B, pogl. 6].
+Zaključek. HEMS iz pasivnega odjemalca naredi aktivnega prosumerja. Z modelom komponent in MILP-optimizacijo usklajuje PV, hranilnike in prilagodljivo porabo ter z istimi napravami doseže nižji strošek in večjo lastno porabo kot krmiljenje po pravilih. Velikost učinka je odvisna od velikosti naprav, cenovnih razlik in prilagodljivosti uporabnika.
+
+
