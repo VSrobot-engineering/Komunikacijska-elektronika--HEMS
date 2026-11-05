@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HEMS – simulator pametnega doma</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f2ef;
+  --surface-1: #fcfcfb;
+  --surface-2: #f7f6f3;
+  --border: #e3e1dc;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7873;
+  --accent: #2a78d6;
+  --pv: #eda100;
+  --load: #2a78d6;
+  --bat: #eb6834;
+  --grid: #6250d6;
+  --ok: #0f7b3e;
+  --bad: #c0392b;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text-primary); }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+h2 { font-size: 15px; }
+h3 { font-size: 13px; }
+button, select, input { font: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- glava ---------- */
+header.top {
+  display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+  background: var(--surface-1); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 20;
+}
+header.top .title h1 { font-size: 17px; }
+header.top .title p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-left: auto; }
+.seg button { border: 0; background: var(--surface-1); padding: 7px 14px; cursor: pointer; color: var(--text-secondary); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--text-primary); color: #fff; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------- razporeditev ---------- */
+.layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+aside.params {
+  position: sticky; top: 57px; height: calc(100vh - 57px); overflow-y: auto;
+  background: var(--surface-1); border-right: 1px solid var(--border); padding: 12px 14px 40px;
+}
+main { padding: 14px 18px 60px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; min-width: 0; }
+.card > header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.card > header .sub { color: var(--text-secondary); font-size: 12px; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1250px) { .row2 { grid-template-columns: 1fr; } }
+
+/* ---------- časovna vrstica ---------- */
+.timebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 57px; z-index: 15; }
+.timebar .clock { font-size: 22px; font-weight: 600; min-width: 150px; }
+.timebar .clock small { display: block; font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.timebar input[type=range] { flex: 1; min-width: 200px; accent-color: var(--text-primary); }
+.btn { border: 1px solid var(--border); background: var(--surface-1); border-radius: 8px; padding: 7px 12px; cursor: pointer; color: var(--text-primary); }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+.btn.primary:hover { background: #333; }
+.ctl { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.ctl select { padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); }
+
+/* ---------- parametri ---------- */
+.pgroup { border-bottom: 1px solid var(--border); padding: 8px 0 10px; }
+.pgroup > summary { cursor: pointer; font-weight: 600; padding: 4px 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+.pgroup > summary::-webkit-details-marker { display: none; }
+.pgroup > summary::before { content: "▸"; color: var(--text-muted); width: 10px; }
+.pgroup[open] > summary::before { content: "▾"; }
+.pgroup .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.field { display: grid; grid-template-columns: 1fr 112px; align-items: center; gap: 4px 8px; margin: 6px 0; }
+.field label { color: var(--text-secondary); font-size: 12.5px; }
+.field .inp { display: flex; align-items: center; gap: 4px; }
+.field input[type=number], .field select { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; text-align: right; }
+.field select { text-align: left; }
+.field .unit { color: var(--text-muted); font-size: 11px; min-width: 34px; }
+.field input[type=number] { min-width: 0; }
+.field input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--text-secondary); height: 14px; }
+.field.check { grid-template-columns: auto 1fr; }
+.field.check label { color: var(--text-primary); }
+.loadbox { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 8px 0; background: var(--surface-2); }
+.loadbox.off .field:not(.check) { opacity: .45; }
+.loadbox h3 { display: flex; align-items: center; gap: 6px; }
+.note { color: var(--text-muted); font-size: 11.5px; line-height: 1.45; margin: 6px 0; }
+.defaults-tag { display: inline-block; font-size: 10.5px; background: #fff4d6; color: #6b4e00; border-radius: 4px; padding: 1px 6px; margin-left: 4px; }
+
+/* ---------- tok energije ---------- */
+.flow svg { width: 100%; height: auto; display: block; }
+.flow .edge-base { stroke: #e6e4df; fill: none; stroke-linecap: round; }
+.flow .edge { fill: none; stroke-linecap: round; stroke-dasharray: 10 9; animation: dash var(--dur, 1s) linear infinite; }
+@keyframes dash { from { stroke-dashoffset: 19; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .flow .edge { animation: none; stroke-dasharray: none; } }
+.flow .edge-label { font-size: 13px; font-weight: 600; fill: var(--text-primary); paint-order: stroke; stroke: var(--surface-1); stroke-width: 4px; }
+.flow .edge-sub { font-size: 11px; fill: var(--text-secondary); paint-order: stroke; stroke: var(--surface-1); stroke-width: 4px; }
+.flow .node-box { fill: var(--surface-1); stroke: var(--border); stroke-width: 1.5; }
+.flow .node-title { font-size: 12px; fill: var(--text-secondary); }
+.flow .node-val { font-size: 15px; font-weight: 600; fill: var(--text-primary); }
+.flow .hub { fill: var(--text-primary); }
+.flow .hub-t { fill: #fff; font-size: 13px; font-weight: 700; }
+.splits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.splits div { background: var(--surface-2); border-radius: 6px; padding: 5px 8px; font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+.splits b { color: var(--text-primary); font-weight: 600; }
+
+/* ---------- stanje ---------- */
+table.kv { width: 100%; border-collapse: collapse; }
+table.kv td { padding: 5px 4px; border-bottom: 1px solid var(--border); }
+table.kv td:last-child { text-align: right; font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.loadrow { display: grid; grid-template-columns: 210px 1fr 64px; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.loadrow .bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.loadrow .bar i { display: block; height: 100%; border-radius: 4px; }
+.loadrow .v { text-align: right; font-variant-numeric: tabular-nums; }
+.loadrow.off { color: var(--text-muted); }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--surface-2); color: var(--text-secondary); margin-left: 4px; }
+
+/* ---------- kazalniki ---------- */
+.tiles { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1300px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tile { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.tile .lab { font-size: 12px; color: var(--text-secondary); }
+.tile .val { font-size: 21px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .val small { font-size: 12px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+.tile .now { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ---------- grafi ---------- */
+.charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1250px) { .charts { grid-template-columns: 1fr; } }
+.chart { position: relative; min-width: 0; }
+.chart .ct { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.chart .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; min-height: 18px; }
+.chart .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.chart .legend i.blk { height: 10px; width: 10px; border-radius: 3px; }
+.chart canvas { width: 100%; display: block; cursor: crosshair; }
+.tip { position: absolute; pointer-events: none; background: #1b1b1a; color: #f0efec; font-size: 12px; padding: 7px 9px; border-radius: 6px; white-space: nowrap; z-index: 5; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+.tip .tr { display: flex; gap: 10px; justify-content: space-between; }
+.tip .tr span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+.tip .th { color: #c3c2b7; margin-bottom: 3px; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+/* ---------- primerjava ---------- */
+table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.cmp th, table.cmp td { white-space: nowrap; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+table.cmp th:first-child, table.cmp td:first-child { text-align: left; white-space: normal; }
+table.cmp thead th { font-size: 12px; color: var(--text-secondary); font-weight: 600; background: var(--surface-2); }
+table.cmp td.better { color: var(--ok); font-weight: 600; }
+table.cmp td.worse { color: var(--bad); }
+.cmpgrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1250px) { .cmpgrid { grid-template-columns: 1fr; } }
+
+/* ---------- preverjanje ---------- */
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.checks ul { list-style: none; padding: 0; margin: 0; }
+.checks li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.checks li .ic { font-weight: 700; }
+.checks li.ok .ic { color: var(--ok); }
+.checks li.bad .ic { color: var(--bad); }
+.checks li .d { color: var(--text-muted); font-size: 11.5px; }
+
+/* ---------- dokumentacija ---------- */
+.docs details { border-top: 1px solid var(--border); padding: 8px 0; }
+.docs summary { cursor: pointer; font-weight: 600; }
+.docs p, .docs li { line-height: 1.55; color: var(--text-secondary); }
+.docs .eq { font-family: "Cambria Math", "Times New Roman", serif; font-size: 15px; background: var(--surface-2); padding: 8px 12px; border-radius: 6px; margin: 6px 0; color: var(--text-primary); overflow-x: auto; }
+.docs code { background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+.docs table { border-collapse: collapse; font-size: 12.5px; }
+.docs table td, .docs table th { border: 1px solid var(--border); padding: 4px 8px; text-align: right; }
+.docs table td:first-child, .docs table th:first-child { text-align: left; }
+
+/* ---------- povzetek (modal) ---------- */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 50; }
+.modal.show { display: flex; }
+.modal .box { background: var(--surface-1); border-radius: 12px; padding: 18px 20px; width: min(720px, 92vw); max-height: 86vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.modal .box h2 { font-size: 17px; margin-bottom: 8px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.pill.ok { background: #e3f4ea; color: var(--ok); }
+.pill.bad { background: #fbe5e2; color: var(--bad); }
+
+/* ---------- animirana hiša ---------- */
+.scene-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; align-items: start; }
+@media (max-width: 1250px) { .scene-wrap { grid-template-columns: 1fr; } }
+#scene svg.house { width: 100%; height: auto; display: block; border-radius: 8px; }
+.house .box { fill: #fbfaf7; stroke: #8f877a; stroke-width: 1.4; }
+.house .sc-clock { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.house .sc-price { font-size: 13px; font-weight: 600; }
+.house .sc-sub { font-size: 12px; }
+.house .sc-lab { font-size: 12px; font-weight: 600; fill: #3a3935; }
+.house .sc-room { font-size: 10.5px; fill: #9b917f; letter-spacing: .02em; }
+.house .sc-mini { font-size: 10.5px; fill: #52514e; }
+.house .sc-val { font-size: 12px; font-weight: 700; fill: #0b0b0b; font-variant-numeric: tabular-nums; }
+.house .sc-val.inv { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 2px; }
+.house .sc-hub { fill: #fff; font-size: 14px; font-weight: 700; }
+.house .sc-hub2 { fill: #c3c2b7; font-size: 10.5px; }
+.house .sc-wl { font-size: 11.5px; font-weight: 700; fill: #0b0b0b; paint-order: stroke; stroke: rgba(255,255,255,.9); stroke-width: 3.5px; font-variant-numeric: tabular-nums; }
+.house .wire-base { fill: none; stroke: #c9c2b5; stroke-width: 2.5; stroke-linejoin: round; }
+.house .wire { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 0.1 13; animation: flowdots 0.8s linear infinite; transition: opacity .25s; }
+@keyframes flowdots { from { stroke-dashoffset: 13.1; } to { stroke-dashoffset: 0; } }
+.house .spin { transform-box: fill-box; transform-origin: center; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.house #sun, .house #moon, .house rect, .house #clouds { transition: all .35s ease; }
+@media (prefers-reduced-motion: reduce) { .house .wire { animation: none; stroke-dasharray: 6 6; } .house .spin { animation: none; } }
+.live { display: flex; flex-direction: column; gap: 8px; }
+.live .lv { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 14px 1fr; gap: 2px 6px; font-size: 12px; color: var(--text-secondary); }
+.live .lv b { grid-column: 2; font-size: 18px; color: var(--text-primary); }
+
+/* ---------- učni moduli ---------- */
+.modbar { display: flex; align-items: center; gap: 6px; padding: 10px; flex-wrap: wrap; }
+.modbtn { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface-1); border-radius: 10px; padding: 7px 12px; cursor: pointer; text-align: left; color: var(--text-primary); }
+.modbtn:hover { background: var(--surface-2); }
+.modbtn .mn { width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 700; font-size: 12px; color: var(--text-secondary); }
+.modbtn b { display: block; font-size: 13px; }
+.modbtn small { display: block; font-size: 11px; color: var(--text-muted); }
+.modbtn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+.modbtn.active small { color: #c3c2b7; }
+.modbtn.active .mn { background: #fff; color: var(--text-primary); }
+.modarrow { color: var(--text-muted); }
+.explain-now { margin-top: 12px; background: #f4f8fc; border: 1px solid #d6e4f2; border-radius: 8px; padding: 10px 14px; min-height: 92px; }
+.explain-now .en-h { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.explain-now p { margin: 3px 0; line-height: 1.5; font-size: 13.5px; }
+.modinfo .mi-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 20px; }
+@media (max-width: 1250px) { .modinfo .mi-grid { grid-template-columns: 1fr; } }
+.modinfo h3 { margin: 10px 0 4px; font-size: 13px; }
+.modinfo h3:first-child { margin-top: 0; }
+.modinfo p, .modinfo li { line-height: 1.55; color: var(--text-secondary); font-size: 13px; margin: 4px 0; }
+.modinfo ol, .modinfo ul { padding-left: 18px; margin: 4px 0; }
+.modinfo .eq { font-family: "Cambria Math", "Times New Roman", serif; font-size: 14px; background: var(--surface-2); padding: 6px 10px; border-radius: 6px; margin: 5px 0; overflow-x: auto; }
+.modinfo .src { font-size: 12px; }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="title">
+    <h1>HEMS – simulator upravljanja energije v pametnem domu</h1>
+    <p>Demonstracijski prototip za seminarsko nalogo · vse vrednosti so privzete simulacijske predpostavke, ne podatki iz magistrskih nalog</p>
+  </div>
+  <div class="seg" role="group" aria-label="Način upravljanja">
+    <button id="modeA" type="button">Način A – osnovno upravljanje</button>
+    <button id="modeB" type="button" class="active">Način B – pametno upravljanje HEMS</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="params" id="params" aria-label="Parametri"></aside>
+
+  <main>
+    <nav class="card modbar" id="modBar" aria-label="Učni moduli"></nav>
+
+    <section class="card timebar" aria-label="Časovna os">
+      <div class="clock num" id="clock">00.00<small>korak 1/96</small></div>
+      <button class="btn primary" id="play" type="button">▶ Začni</button>
+      <button class="btn" id="reset" type="button">↺ Ponastavi</button>
+      <input type="range" id="slider" min="0" max="95" value="0" aria-label="Časovni položaj simulacije">
+      <label class="ctl">Korak
+        <select id="dt"><option value="0.25">15 min</option><option value="0.5">30 min</option><option value="1">60 min</option></select>
+      </label>
+      <label class="ctl">Hitrost
+        <select id="speed"><option value="2">počasi</option><option value="5" selected>srednje</option><option value="12">hitro</option></select>
+      </label>
+    </section>
+
+    <section class="card scene-card">
+      <header><h2>Pametni dom v živo</h2><span class="sub">pike na žicah prikazujejo smer in velikost toka moči (debelejša in hitrejša = večja moč) · parametre spreminjajte v levem panelu</span></header>
+      <div class="scene-wrap"><div id="scene"></div><div class="live" id="live"></div></div>
+      <div class="explain-now" id="explainNow" aria-live="polite"></div>
+    </section>
+
+    <section class="card modinfo" id="modInfo"></section>
+
+    <section class="card">
+      <header><h2>Dnevni kazalniki</h2><span class="sub" id="kpiSub"></span></header>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Potek skozi dan</h2><span class="sub">klik na graf premakne časovni položaj · sivi pas = trenutni korak</span></header>
+      <div class="charts">
+        <div class="chart" id="chPower"></div>
+        <div class="chart" id="chSoc"></div>
+        <div class="chart" id="chLoads"></div>
+        <div class="chart" id="chPrice"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>Primerjava načinov A in B pri enakih vhodnih podatkih</h2><span class="sub">celoten dan, 00.00–24.00</span></header>
+      <div class="cmpgrid">
+        <div><table class="cmp" id="cmpTable"></table><p class="note" id="cmpNote"></p></div>
+        <div>
+          <div class="chart" id="chCost"></div>
+          <div class="chart" id="chSocAB" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>Preverjanje pravilnosti</h2><span class="sub">samodejno po vsakem izračunu</span></header>
+      <div class="checks"><div><h3>Način A</h3><ul id="checksA"></ul></div><div><h3>Način B</h3><ul id="checksB"></ul></div></div>
+    </section>
+
+    <section class="card docs" id="docs"></section>
+  </main>
+</div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="box">
+    <h2 id="modalTitle">Dnevni povzetek</h2>
+    <div id="modalBody"></div>
+    <div style="text-align:right;margin-top:12px"><button class="btn primary" id="modalClose" type="button">Zapri</button></div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   HEMS – simulacijski model (čisti JavaScript, brez odvisnosti)
+   Vse privzete vrednosti so SIMULACIJSKE PREDPOSTAVKE za demonstracijo,
+   ne podatki iz magistrskih nalog.
+   ========================================================================== */
+(function (root) {
+  'use strict';
+
+  const DEFAULTS = {
+    dt: 0.25, // časovni korak [h]
+    pv: { on: true, Pp: 6.0, factor: 1.0, season: 'pomlad', sunrise: 6.5, sunset: 19.5, peak: 0.75 },
+    bat: { on: true, cap: 10, Pch: 5, Pdis: 5, soc0: 50, socMin: 10, socMax: 95, etaCh: 95, etaDis: 95 },
+    grid: {
+      tariff: 'dvotarifna', vt: 0.20, mt: 0.12, vtStart: 6, vtEnd: 22, sell: 0.06,
+      dynAdd: 0.08, dynSellFactor: 1.0, Pimp: 11, Pexp: 11
+    },
+    loads: {
+      base: { on: true, E: 7.0 },
+      hp: { on: true, E: 9.0, Pmax: 3.0, flex: true },
+      boiler: { on: true, E: 4.0, P: 2.0, s: 10, e: 20, start: 17 },
+      wash: { on: true, P: 1.2, D: 2.0, s: 8, e: 22, start: 19 },
+      dish: { on: true, P: 1.0, D: 2.0, s: 8, e: 23, start: 21 },
+      ev: { on: true, E: 14.0, P: 7.4, s: 18, e: 7, start: 18 }
+    },
+    hems: { gridCharge: true, terminal: true }
+  };
+
+  const LOAD_KEYS = ['base', 'hp', 'boiler', 'wash', 'dish', 'ev'];
+  const LOAD_NAMES = {
+    base: 'Osnovna poraba', hp: 'Toplotna črpalka', boiler: 'Električni bojler',
+    wash: 'Pralni stroj', dish: 'Pomivalni stroj', ev: 'Polnjenje EV'
+  };
+  const SEASONS = {
+    poletje: { sunrise: 5.5, sunset: 20.5, peak: 0.78, label: 'Poletje (jasno)' },
+    pomlad: { sunrise: 6.5, sunset: 19.5, peak: 0.75, label: 'Pomlad / jesen' },
+    zima: { sunrise: 7.5, sunset: 16.5, peak: 0.55, label: 'Zima' }
+  };
+
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const SUB = 12; // podkoraki za povprečenje profilov znotraj koraka
+  const EPS = 1e-7;
+
+  /* ---------- pomožne funkcije ---------- */
+  function avgOverStep(fn, k, dt) {
+    let s = 0;
+    for (let j = 0; j < SUB; j++) s += fn(k * dt + (j + 0.5) * dt / SUB);
+    return s / SUB;
+  }
+  const gauss = (t, m, s) => Math.exp(-0.5 * ((t - m) / s) ** 2);
+
+  /** Ali je korak k (interval [k·dt, (k+1)·dt)) v celoti znotraj okna [s, e)? Okno lahko prečka polnoč. */
+  function inWindow(k, dt, s, e) {
+    const a = k * dt + EPS, b = (k + 1) * dt - EPS;
+    if (Math.abs(s - e) < EPS) return true; // celodnevno okno
+    if (s < e) return a >= s && b <= e;
+    return a >= s || b <= e;
+  }
+
+  /* ---------- profili ---------- */
+  function pvShape(t, pv) {
+    if (t <= pv.sunrise || t >= pv.sunset) return 0;
+    return Math.sin(Math.PI * (t - pv.sunrise) / (pv.sunset - pv.sunrise)) ** 2;
+  }
+  function pvProfile(p, N) {
+    const pv = p.pv, out = new Array(N).fill(0);
+    if (!pv.on) return out;
+    for (let k = 0; k < N; k++) out[k] = pv.Pp * pv.factor * pv.peak * avgOverStep((t) => pvShape(t, pv), k, p.dt);
+    return out;
+  }
+  function baseShape(t) {
+    return 0.25 + 0.9 * gauss(t, 7.5, 1.0) + 0.35 * gauss(t, 12.5, 1.2) + 1.3 * gauss(t, 19.5, 1.8);
+  }
+  function hpShape(t) { return 1 + 0.35 * Math.cos(2 * Math.PI * (t - 5) / 24); } // več ponoči/zjutraj (hladneje)
+
+  function normalizedProfile(shapeFn, E, N, dt) {
+    const raw = []; let sum = 0;
+    for (let k = 0; k < N; k++) { const v = avgOverStep(shapeFn, k, dt); raw.push(v); sum += v * dt; }
+    return raw.map((v) => (sum > 0 ? v * E / sum : 0));
+  }
+
+  function dynPrice(t) { // demonstracijska krivulja borzne cene [€/kWh] (\"račja krivulja\")
+    return 0.10 + 0.06 * gauss(t, 8, 1.5) - 0.06 * gauss(t, 13.5, 2.5) + 0.12 * gauss(t, 19.5, 1.8) - 0.02 * gauss(t, 3.5, 2.5);
+  }
+  function priceProfile(p, N) {
+    const g = p.grid, buy = [], sell = [];
+    for (let k = 0; k < N; k++) {
+      if (g.tariff === 'dvotarifna') {
+        const vt = midIn(k, p.dt, g.vtStart, g.vtEnd); // tarifni blok po sredini koraka
+        buy.push(vt ? g.vt : g.mt); sell.push(g.sell);
+      } else {
+        const b = avgOverStep(dynPrice, k, p.dt);
+        buy.push(+(b + g.dynAdd).toFixed(5)); sell.push(+Math.max(0, b * g.dynSellFactor).toFixed(5));
+      }
+    }
+    return { buy, sell };
+  }
+  function midIn(k, dt, s, e) {
+    const m = (k + 0.5) * dt;
+    return s < e ? m >= s && m < e : m >= s || m < e;
+  }
+
+  /* ---------- porabniki ---------- */
+  function machineSteps(m, dt) {
+    const n = Math.max(1, Math.round(m.D / dt));
+    return { n, Peff: m.P * m.D / (n * dt) }; // energija cikla ostane P·D
+  }
+  function machineStarts(m, N, dt, n) {
+    const starts = [];
+    for (let k = 0; k + n <= N; k++) {
+      let ok = true;
+      for (let j = 0; j < n; j++) if (!inWindow(k + j, dt, m.s, m.e)) { ok = false; break; }
+      if (ok) starts.push(k);
+    }
+    return starts;
+  }
+  function allowedSteps(l, N, dt) {
+    const a = [];
+    for (let k = 0; k < N; k++) if (inWindow(k, dt, l.s, l.e)) a.push(k);
+    return a;
+  }
+
+  /** Pripravi vse vhodne podatke za izbrani korak (skupno za oba načina in za MILP-preverjanje). */
+  function prepare(params) {
+    const p = params, dt = p.dt, N = Math.round(24 / dt);
+    const L = p.loads;
+    const pv = pvProfile(p, N);
+    const pr = priceProfile(p, N);
+    const base = L.base.on ? normalizedProfile(baseShape, L.base.E, N, dt) : new Array(N).fill(0);
+    let hpRef = L.hp.on ? normalizedProfile(hpShape, L.hp.E, N, dt) : new Array(N).fill(0);
+    // HP referenčni profil omejimo z Pmax (preostanek bi bil nepokrit)
+    hpRef = hpRef.map((v) => Math.min(v, L.hp.Pmax));
+    const hpBlocks = [];
+    const bl = Math.max(1, Math.round(6 / dt)); // 6-urni bloki toplotne vztrajnosti
+    for (let b = 0; b < N; b += bl) {
+      const idx = []; let E = 0;
+      for (let k = b; k < Math.min(N, b + bl); k++) { idx.push(k); E += hpRef[k] * dt; }
+      hpBlocks.push({ idx, E });
+    }
+    const machines = {};
+    ['wash', 'dish'].forEach((key) => {
+      const m = L[key]; const { n, Peff } = machineSteps(m, dt);
+      machines[key] = { n, Peff, starts: m.on ? machineStarts(m, N, dt, n) : [], pref: Math.round(m.start / dt) % N };
+    });
+    const cont = {};
+    ['boiler', 'ev'].forEach((key) => {
+      const l = L[key];
+      cont[key] = { allowed: l.on ? allowedSteps(l, N, dt) : [], pref: Math.round(l.start / dt) % N };
+    });
+    return { N, dt, pv, buy: pr.buy, sell: pr.sell, base, hpRef, hpBlocks, machines, cont };
+  }
+
+  /* ---------- razvrščanje porabnikov ---------- */
+  // Način A: po nastavitvah uporabnika
+  function scheduleA(p, D) {
+    const { N, dt } = D, L = p.loads, sched = {}, unmet = {};
+    sched.base = D.base.slice();
+    sched.hp = D.hpRef.slice();
+    ['boiler', 'ev'].forEach((key) => {
+      const l = L[key], arr = new Array(N).fill(0);
+      let rem = l.on ? l.E : 0;
+      const allowedSet = new Set(D.cont[key].allowed);
+      for (let i = 0; i < N && rem > EPS; i++) {
+        const k = (D.cont[key].pref + i) % N;
+        if (!allowedSet.has(k)) continue;
+        const e = Math.min(l.P * dt, rem); arr[k] = e / dt; rem -= e;
+      }
+      sched[key] = arr; unmet[key] = Math.max(0, rem);
+    });
+    ['wash', 'dish'].forEach((key) => {
+      const m = D.machines[key], arr = new Array(N).fill(0);
+      if (L[key].on) {
+        if (m.starts.length) {
+          let best = m.starts[0];
+          m.starts.forEach((k) => { if (Math.abs(k - m.pref) < Math.abs(best - m.pref)) best = k; });
+          for (let j = 0; j < m.n; j++) arr[best + j] = m.Peff;
+          unmet[key] = 0; sched[key + 'Start'] = best;
+        } else unmet[key] = L[key].P * L[key].D;
+      } else unmet[key] = 0;
+      sched[key] = arr;
+    });
+    return { sched, unmet };
+  }
+
+  // Način B: hevristika – razvrščanje po efektivni mejni ceni (PV-prebitek = odkupna cena, sicer nakupna)
+  function scheduleB(p, D) {
+    const { N, dt } = D, L = p.loads, sched = {}, unmet = {};
+    sched.base = D.base.slice();
+    const resid = D.pv.map((v, k) => v - D.base[k]); // prebitek PV [kW]
+    const hpFlex = L.hp.on && L.hp.flex;
+    if (!hpFlex) { sched.hp = D.hpRef.slice(); for (let k = 0; k < N; k++) resid[k] -= sched.hp[k]; }
+
+    const marg = (k) => (resid[k] * dt > EPS ? D.sell[k] : D.buy[k]);
+    function greedy(steps, E, Pmax, arr) {
+      let rem = E;
+      const delta = Math.max(0.005, Math.min(0.05, E / 60));
+      let guard = 0;
+      while (rem > EPS && guard++ < 100000) {
+        let best = -1, bp = Infinity, bs = -Infinity;
+        for (const k of steps) {
+          if (arr[k] >= Pmax - EPS) continue;
+          const pr = marg(k);
+          if (pr < bp - 1e-12 || (Math.abs(pr - bp) <= 1e-12 && resid[k] > bs)) { best = k; bp = pr; bs = resid[k]; }
+        }
+        if (best < 0) break;
+        let e = Math.min(delta, rem, (Pmax - arr[best]) * dt);
+        if (resid[best] * dt > EPS) e = Math.min(e, resid[best] * dt); // ne prečkaj meje prebitka
+        arr[best] += e / dt; resid[best] -= e / dt; rem -= e;
+      }
+      return Math.max(0, rem);
+    }
+
+    // zvezni prilagodljivi porabniki – večji najprej
+    const items = [];
+    if (L.ev.on) items.push({ key: 'ev', E: L.ev.E });
+    if (hpFlex) items.push({ key: 'hp', E: L.hp.E });
+    if (L.boiler.on) items.push({ key: 'boiler', E: L.boiler.E });
+    items.sort((a, b) => b.E - a.E);
+    ['ev', 'boiler', 'hp'].forEach((k) => { sched[k] = sched[k] || new Array(N).fill(0); unmet[k] = 0; });
+    for (const it of items) {
+      if (it.key === 'hp') {
+        let u = 0;
+        for (const b of D.hpBlocks) u += greedy(b.idx, b.E, L.hp.Pmax, sched.hp);
+        unmet.hp = u;
+      } else {
+        unmet[it.key] = greedy(D.cont[it.key].allowed, L[it.key].E, L[it.key].P, sched[it.key]);
+      }
+    }
+    // nepretrgani cikli strojev – izbira začetka z najnižjim mejnim stroškom
+    ['wash', 'dish'].forEach((key) => {
+      const m = D.machines[key], arr = new Array(N).fill(0);
+      unmet[key] = 0;
+      if (L[key].on) {
+        if (!m.starts.length) unmet[key] = L[key].P * L[key].D;
+        else {
+          let best = -1, bc = Infinity;
+          for (const k of m.starts) {
+            let c = 0;
+            for (let j = 0; j < m.n; j++) {
+              const t = k + j, sur = Math.max(0, resid[t]);
+              c += (D.sell[t] * Math.min(m.Peff, sur) + D.buy[t] * Math.max(0, m.Peff - sur)) * dt;
+            }
+            const better = c < bc - 1e-9 || (Math.abs(c - bc) <= 1e-9 && Math.abs(k - m.pref) < Math.abs(best - m.pref));
+            if (better) { bc = c; best = k; }
+          }
+          for (let j = 0; j < m.n; j++) { arr[best + j] = m.Peff; resid[best + j] -= m.Peff; }
+          sched[key + 'Start'] = best;
+        }
+      }
+      sched[key] = arr;
+    });
+    return { sched, unmet };
+  }
+
+  /* ---------- baterija ---------- */
+  function batParams(p) {
+    const b = p.bat;
+    const cap = b.on ? b.cap : 0;
+    const Emin = cap * b.socMin / 100, Emax = cap * b.socMax / 100;
+    const E0 = Math.min(Emax, Math.max(Emin, cap * b.soc0 / 100));
+    return { on: b.on && cap > 0, cap, Emin, Emax, E0, Pch: b.Pch, Pdis: b.Pdis, ec: b.etaCh / 100, ed: b.etaDis / 100 };
+  }
+
+  // Način A: pravila (PV → poraba → baterija → omrežje; primanjkljaj: baterija → omrežje)
+  function batteryRules(d, B, dt) {
+    const N = d.length, ch = new Array(N).fill(0), dis = new Array(N).fill(0);
+    let E = B.E0;
+    for (let k = 0; k < N; k++) {
+      if (!B.on) continue;
+      if (d[k] < 0) {
+        const c = Math.max(0, Math.min(-d[k], B.Pch, (B.Emax - E) / (B.ec * dt)));
+        ch[k] = c; E += B.ec * c * dt;
+      } else if (d[k] > 0) {
+        const x = Math.max(0, Math.min(d[k], B.Pdis, (E - B.Emin) * B.ed / dt));
+        dis[k] = x; E -= x / B.ed * dt;
+      }
+      E = Math.min(B.Emax, Math.max(B.Emin, E));
+    }
+    return { ch, dis };
+  }
+
+  // Način B: dinamično programiranje po diskretiziranem SOC (optimalno za podproblem baterije pri danem odjemu)
+  function batteryDP(d, buy, sell, B, g, dt, opt) {
+    const N = d.length, ch = new Array(N).fill(0), dis = new Array(N).fill(0);
+    if (!B.on) return { ch, dis };
+    const Lv = 600;
+    const h = Math.max(1e-4, (B.Emax - B.Emin) / Lv);
+    const kmin = Math.ceil((B.Emin - B.E0) / h - 1e-9), kmax = Math.floor((B.Emax - B.E0) / h + 1e-9);
+    const S = kmax - kmin + 1, i0 = -kmin;
+    const up = Math.floor(B.Pch * B.ec * dt / h + 1e-9), dn = Math.floor(B.Pdis / B.ed * dt / h + 1e-9);
+    const W = up + dn + 1;
+    const stepCost = new Float64Array(N * W);
+    for (let t = 0; t < N; t++) {
+      for (let q = -dn; q <= up; q++) {
+        const dE = q * h; let pch = 0, pdis = 0, c = 0;
+        if (q > 0) { pch = dE / (B.ec * dt); if (!opt.gridCharge && pch > Math.max(-d[t], 0) + 1e-9) c = Infinity; }
+        else if (q < 0) { pdis = -dE * B.ed / dt; if (pdis > Math.max(d[t], 0) + 1e-9) c = Infinity; }
+        if (c === 0) {
+          const gr = d[t] + pch - pdis;
+          const imp = Math.max(gr, 0); let ex = Math.max(-gr, 0); ex = Math.min(ex, g.Pexp);
+          const pen = imp > g.Pimp + 1e-9 ? 1e3 * (imp - g.Pimp) : 0;
+          // majhen konveksen člen samo za razreševanje enakovrednih rešitev (gladkejši potek); vpliv < 0,01 €/dan
+          c = (buy[t] * imp - sell[t] * ex) * dt + pen + 1e-6 * Math.abs(dE) + 2e-5 * (imp * imp + ex * ex) * dt;
+        }
+        stepCost[t * W + q + dn] = c;
+      }
+    }
+    let V = new Float64Array(S);
+    for (let i = 0; i < S; i++) V[i] = opt.terminal && i < i0 ? Infinity : 0;
+    const choice = new Int32Array(N * S);
+    for (let t = N - 1; t >= 0; t--) {
+      const Vn = new Float64Array(S);
+      for (let i = 0; i < S; i++) {
+        let best = Infinity, bj = i;
+        const jlo = Math.max(0, i - dn), jhi = Math.min(S - 1, i + up);
+        for (let j = jlo; j <= jhi; j++) {
+          const v = stepCost[t * W + (j - i) + dn] + V[j];
+          if (v < best) { best = v; bj = j; }
+        }
+        Vn[i] = best; choice[t * S + i] = bj;
+      }
+      V = Vn;
+    }
+    let i = i0;
+    if (!isFinite(V[i0])) return batteryRules(d, B, dt); // ni izvedljivo – varovalka
+    for (let t = 0; t < N; t++) {
+      const j = choice[t * S + i], q = j - i;
+      if (q > 0) ch[t] = q * h / (B.ec * dt); else if (q < 0) dis[t] = -q * h * B.ed / dt;
+      i = j;
+    }
+    return { ch, dis };
+  }
+
+  /* ---------- simulacija ---------- */
+  function simulate(params, mode) {
+    const p = params, D = prepare(p), { N, dt } = D;
+    const { sched, unmet } = mode === 'B' ? scheduleB(p, D) : scheduleA(p, D);
+    const load = new Array(N).fill(0);
+    LOAD_KEYS.forEach((k) => { if (sched[k]) for (let t = 0; t < N; t++) load[t] += sched[k][t]; });
+    const d = load.map((v, t) => v - D.pv[t]);
+    const B = batParams(p);
+    const bat = mode === 'B'
+      ? batteryDP(d, D.buy, D.sell, B, p.grid, dt, { gridCharge: p.hems.gridCharge, terminal: p.hems.terminal })
+      : batteryRules(d, B, dt);
+
+    const R = {
+      mode, N, dt, pv: D.pv, buy: D.buy, sell: D.sell, sched, unmet, load,
+      ch: bat.ch, dis: bat.dis, imp: [], exp: [], curt: [], pvUsed: [], E: [], soc: [],
+      flows: [], B
+    };
+    let E = B.E0;
+    for (let t = 0; t < N; t++) {
+      const gr = load[t] + bat.ch[t] - bat.dis[t] - D.pv[t];
+      let imp = Math.max(gr, 0), ex = Math.max(-gr, 0), curt = 0;
+      if (ex > p.grid.Pexp) { curt = ex - p.grid.Pexp; ex = p.grid.Pexp; }
+      if (imp < 1e-9) imp = 0; if (ex < 1e-9) ex = 0;
+      const pvUsed = D.pv[t] - curt;
+      E += (B.ec * bat.ch[t] - bat.dis[t] / B.ed) * dt;
+      R.imp.push(imp); R.exp.push(ex); R.curt.push(curt); R.pvUsed.push(pvUsed);
+      R.E.push(E); R.soc.push(B.cap > 0 ? 100 * E / B.cap : 0);
+      // razčlenitev tokov
+      const pv2load = Math.min(pvUsed, load[t]);
+      const pv2bat = Math.min(pvUsed - pv2load, bat.ch[t]);
+      const bat2load = Math.min(bat.dis[t], load[t] - pv2load);
+      const grid2load = Math.max(0, load[t] - pv2load - bat2load);
+      const grid2bat = Math.max(0, bat.ch[t] - pv2bat);
+      R.flows.push({ pv2load, pv2bat, pv2grid: ex, bat2load, grid2load, grid2bat });
+    }
+    R.socStart = B.cap > 0 ? 100 * B.E0 / B.cap : 0;
+    R.kpi = kpis(R, p);
+    R.checks = checks(R, p, D);
+    return R;
+  }
+
+  function sum(a, dt) { let s = 0; for (const v of a) s += v; return s * dt; }
+
+  function kpis(R, p) {
+    const dt = R.dt;
+    const Epv = sum(R.pv, dt), Ecurt = sum(R.curt, dt), Eload = sum(R.load, dt);
+    const Eimp = sum(R.imp, dt), Eexp = sum(R.exp, dt), Ech = sum(R.ch, dt), Edis = sum(R.dis, dt);
+    let cost = 0, costImp = 0, revExp = 0;
+    for (let t = 0; t < R.N; t++) { costImp += R.buy[t] * R.imp[t] * dt; revExp += R.sell[t] * R.exp[t] * dt; }
+    cost = costImp - revExp;
+    const Eself = Epv - Eexp - Ecurt; // lokalno porabljena PV energija (neposredno + prek baterije)
+    const dE = (R.E[R.N - 1] ?? R.B.E0) - R.B.E0;
+    const pRef = R.buy.reduce((a, b) => a + b, 0) / R.N;
+    const unmetTot = Object.values(R.unmet).reduce((a, b) => a + b, 0);
+    let socMinV = Infinity, socMaxV = -Infinity;
+    R.soc.forEach((s) => { socMinV = Math.min(socMinV, s); socMaxV = Math.max(socMaxV, s); });
+    socMinV = Math.min(socMinV, R.socStart); socMaxV = Math.max(socMaxV, R.socStart);
+    return {
+      Epv, Ecurt, Eload, Eimp, Eexp, Ech, Edis, cost, costImp, revExp,
+      selfCons: Epv > EPS ? Eself / Epv : 0,
+      selfSuff: Eload > EPS ? Math.max(0, 1 - Eimp / Eload) : 0,
+      dEbat: dE, costAdj: cost - dE * pRef, pRef,
+      losses: Ech - Edis - dE,
+      socMin: R.B.cap > 0 ? socMinV : NaN, socMax: R.B.cap > 0 ? socMaxV : NaN,
+      socEnd: R.B.cap > 0 ? R.soc[R.N - 1] : NaN,
+      unmet: unmetTot, peakImp: Math.max(...R.imp)
+    };
+  }
+
+  function checks(R, p, D) {
+    const out = [], dt = R.dt, B = R.B, tol = 1e-6;
+    let maxRes = 0;
+    for (let t = 0; t < R.N; t++) {
+      const res = R.pvUsed[t] + R.imp[t] + R.dis[t] - R.load[t] - R.ch[t] - R.exp[t];
+      maxRes = Math.max(maxRes, Math.abs(res));
+    }
+    out.push({ ok: maxRes < tol, label: 'Energijska bilanca v vsakem koraku', detail: `največje odstopanje ${maxRes.toExponential(1)} kW` });
+    const pvSplit = R.flows.reduce((a, f, t) => a + f.pv2load + f.pv2bat + f.pv2grid + R.curt[t], 0) * dt;
+    out.push({ ok: Math.abs(pvSplit - R.kpi.Epv) < 1e-5, label: 'Energija ne nastaja brez vira (PV = poraba + baterija + izvoz + omejitev)', detail: `${pvSplit.toFixed(3)} kWh = ${R.kpi.Epv.toFixed(3)} kWh` });
+    if (B.on) {
+      const okSoc = R.E.every((e) => e >= B.Emin - tol && e <= B.Emax + tol);
+      out.push({ ok: okSoc, label: 'SOC ostaja med SOC_min in SOC_max', detail: `${R.kpi.socMin.toFixed(1)} – ${R.kpi.socMax.toFixed(1)} % (meje ${p.bat.socMin}–${p.bat.socMax} %)` });
+      const okP = R.ch.every((c) => c <= B.Pch + tol) && R.dis.every((x) => x <= B.Pdis + tol);
+      out.push({ ok: okP, label: 'Moči polnjenja in praznjenja niso presežene', detail: `maks. ${Math.max(...R.ch).toFixed(2)} / ${Math.max(...R.dis).toFixed(2)} kW` });
+      const simul = R.ch.some((c, t) => c > tol && R.dis[t] > tol);
+      out.push({ ok: !simul, label: 'Ni hkratnega polnjenja in praznjenja', detail: simul ? 'zaznano' : 'v nobenem koraku' });
+      const lhs = R.kpi.dEbat, rhs = (B.ec * R.kpi.Ech - R.kpi.Edis / B.ed);
+      out.push({ ok: Math.abs(lhs - rhs) < 1e-5, label: 'Izkoristki upoštevani: ΔE = η_c·E_pol − E_praz/η_p', detail: `${lhs.toFixed(3)} = ${rhs.toFixed(3)} kWh; izgube ${R.kpi.losses.toFixed(2)} kWh` });
+    }
+    const both = R.imp.some((v, t) => v > tol && R.exp[t] > tol);
+    out.push({ ok: !both, label: 'Ni hkratnega uvoza in izvoza', detail: both ? 'zaznano' : 'v nobenem koraku' });
+    const over = Math.max(...R.imp) > p.grid.Pimp + tol;
+    out.push({ ok: !over, label: 'Priključna moč (uvoz) ni presežena', detail: `maks. uvoz ${Math.max(...R.imp).toFixed(2)} kW ≤ ${p.grid.Pimp} kW` });
+    // zahteve prilagodljivih porabnikov
+    const L = p.loads; const parts = []; let okLoads = true;
+    ['boiler', 'ev'].forEach((k) => {
+      if (!L[k].on) return;
+      const e = sum(R.sched[k], dt), allowed = new Set(D.cont[k].allowed);
+      const outside = R.sched[k].some((v, t) => v > tol && !allowed.has(t));
+      const pOver = R.sched[k].some((v) => v > L[k].P + tol);
+      const ok = Math.abs(e - L[k].E) < 1e-4 && !outside && !pOver;
+      okLoads = okLoads && ok;
+      parts.push(`${LOAD_NAMES[k]} ${e.toFixed(2)}/${L[k].E} kWh${outside ? ' (izven okna!)' : ''}`);
+    });
+    ['wash', 'dish'].forEach((k) => {
+      if (!L[k].on) return;
+      const e = sum(R.sched[k], dt), st = R.sched[k + 'Start'];
+      const ok = st !== undefined && Math.abs(e - L[k].P * L[k].D) < 1e-4;
+      okLoads = okLoads && ok;
+      parts.push(`${LOAD_NAMES[k]} ${ok ? 'start ' + fmtT(st * dt) : 'ni izvedljivo'}`);
+    });
+    if (L.hp.on) {
+      const e = sum(R.sched.hp, dt), target = D.hpRef.reduce((a, b) => a + b, 0) * dt;
+      const ok = Math.abs(e - target) < 1e-4 && R.sched.hp.every((v) => v <= L.hp.Pmax + tol);
+      okLoads = okLoads && ok;
+      parts.push(`TČ ${e.toFixed(2)}/${target.toFixed(2)} kWh`);
+    }
+    out.push({ ok: okLoads, label: 'Prilagodljivi porabniki izpolnijo energijo v dovoljenem oknu', detail: parts.join('; ') || 'ni vključenih porabnikov' });
+    out.push({ ok: true, label: 'Dnevni kazalniki izračunani iz časovnih profilov (Σ P·Δt)', detail: `${R.N} korakov × ${dt * 60} min` });
+    return out;
+  }
+
+  function fmtT(h) {
+    const m = Math.round(h * 60) % (24 * 60 + 1);
+    const hh = Math.floor(m / 60), mm = m % 60;
+    return String(hh).padStart(2, '0') + '.' + String(mm).padStart(2, '0');
+  }
+
+  function runBoth(params) { return { A: simulate(params, 'A'), B: simulate(params, 'B') }; }
+
+  const API = { DEFAULTS, LOAD_KEYS, LOAD_NAMES, SEASONS, clone, prepare, simulate, runBoth, fmtT, inWindow, batParams };
+  root.HEMS = API;
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* ==========================================================================
+   Učni moduli: sistem razdeljen na posamezne komponente + razlage
+   ========================================================================== */
+(function () {
+  'use strict';
+  const fmt = (v, d = 2) => (isFinite(v) ? v : 0).toLocaleString('sl-SI', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const ALL_LOADS = ['base', 'hp', 'boiler', 'wash', 'dish', 'ev'];
+
+  function setLoads(p, on) { ALL_LOADS.forEach((k) => { p.loads[k].on = on.includes(k); }); }
+
+  const LIST = [
+    {
+      id: 'pv', n: 1, title: 'PV + HEMS', sub: 'proizvodnja',
+      groups: ['pv', 'grid'], loads: [], vis: { pv: true, bat: false },
+      preset(p) { p.bat.on = false; setLoads(p, []); p.pv.on = true; },
+      info: {
+        cilj: 'Razumeti, koliko energije proizvede fotovoltaika, kako je proizvodnja odvisna od nazivne moči, letnega časa in oblačnosti, in kaj HEMS z njo naredi, če v hiši ni porabnikov in ne hranilnika.',
+        kako: `<p>PV-moduli pretvarjajo sončno obsevanje v enosmerni tok, razsmernik ga pretvori v izmeničnega. Moč sledi soncu: ponoči je nič, največja je okoli poldneva. Krivulja ima vedno enako obliko, njeno višino pa določata nazivna moč (kWp) in obsevanje.</p>
+<p>V tem modulu HEMS <b>nima česa odločati</b>: v hiši ni porabnikov in ne baterije, zato gre vsa proizvodnja skozi števec v omrežje (izvoz) in je plačana po odkupni ceni. Edina »odločitev« je omejitev proizvodnje, kadar bi bila moč večja od dovoljene moči oddaje (omejitev priključka).</p>
+<p>Zato sta načina A in B tu enaka – to je izhodišče, s katerim primerjamo vse naslednje module.</p>`,
+        enacbe: ['P<sub>PV</sub>(t) = P<sub>n</sub> · f<sub>obs</sub> · k<sub>vrh</sub> · sin²(π·(t − t<sub>vzhod</sub>)/(t<sub>zahod</sub> − t<sub>vzhod</sub>))',
+          'E<sub>PV</sub> = Σ<sub>t</sub> P<sub>PV,t</sub> · Δt',
+          'P<sub>izvoz,t</sub> = min(P<sub>PV,t</sub>, P<sub>izvoz,max</sub>);  P<sub>omej,t</sub> = P<sub>PV,t</sub> − P<sub>izvoz,t</sub>',
+          'prihodek = Σ<sub>t</sub> c<sub>odk,t</sub> · P<sub>izvoz,t</sub> · Δt'],
+        viri: '[B] izračuna moč PV iz obsevanja, kratkostičnega toka in temperature celice (en. 3.2–3.3), profil normira v p.u. in ga pomnoži z nazivno močjo. [G] uporabi izmerjeno proizvodnjo večje elektrarne, skalirano na 2,25 kW. Prototip uporablja poenostavljeno sinusno krivuljo.',
+        poskusi: ['Nazivno moč povečaj s 6 na 12 kWp: krivulja se raztegne navzgor, dnevna energija se podvoji (odvisnost je linearna).',
+          'Dnevni profil nastavi na »Zima«: dan je krajši in vrh nižji, energije je bistveno manj.',
+          'Faktor obsevanja zmanjšaj na 0,4: na nebu se pojavijo oblaki, proizvodnja pade za 60 %.',
+          'Pri 12 kWp nastavi največjo moč oddaje na 4 kW: opoldne se del proizvodnje omeji in je izgubljen.'],
+        vprasanja: ['Zakaj sta strošek in prihodek v načinih A in B enaka?', 'Koliko kWh na kWp na dan proizvede elektrarna pri izbranem letnem času?', 'Zakaj je omejena energija čista izguba?']
+      }
+    },
+    {
+      id: 'load', n: 2, title: 'HEMS + porabniki', sub: 'odziv odjema',
+      groups: ['loads', 'grid'], loads: ALL_LOADS, vis: { pv: false, bat: false },
+      preset(p) {
+        p.pv.on = false; p.bat.on = false; setLoads(p, ALL_LOADS);
+        p.loads.boiler.s = 0; p.loads.boiler.e = 24; p.loads.boiler.start = 17;
+        p.loads.wash.s = 8; p.loads.wash.e = 24; p.loads.dish.s = 8; p.loads.dish.e = 24;
+      },
+      info: {
+        cilj: 'Razumeti razliko med fiksnimi in prilagodljivimi porabniki ter kako HEMS z odzivom odjema premakne porabo v cenejše ure – brez PV in brez baterije, edini signal je cena.',
+        kako: `<p><b>Fiksen porabnik</b> mora delovati takrat, ko ga uporabnik potrebuje (osnovna poraba: hladilnik, razsvetljava, kuhanje). <b>Prilagodljiv porabnik</b> ima nalogo, ki mora biti opravljena v časovnem oknu: EV mora biti napolnjen do odhoda, voda segreta, perilo oprano. Kdaj točno naprava dela, je za uporabnika manj pomembno – to je prostor za HEMS.</p>
+<p><b>Način A</b>: naprave tečejo ob nastavljenih časih (EV takoj ob prihodu, stroja ob nastavljeni uri). <b>Način B</b>: HEMS za vsak prilagodljiv porabnik poišče najcenejše korake v njegovem oknu. EV in bojler imata zvezno moč, zato HEMS njuno energijo razdeli po najcenejših korakih. Stroja imata nepretrgan cikel, zato HEMS preveri vse možne začetke in izbere najcenejšega. Toplotna črpalka lahko porabo premika le znotraj 6-urnih blokov (toplotna vztrajnost stavbe ne dovoli več).</p>
+<p>Skupna porabljena energija se <b>ne spremeni</b>, spremeni se le njen čas – in s tem strošek.</p>`,
+        enacbe: ['Σ<sub>t</sub> P<sub>i,t</sub> · Δt = E<sub>i</sub>  (porabnik i dobi potrebno energijo)',
+          '0 ≤ P<sub>i,t</sub> ≤ P<sub>i,max</sub>;  P<sub>i,t</sub> = 0 izven okna [t<sub>od</sub>, t<sub>do</sub>)',
+          'stroj m: Σ<sub>s</sub> x<sub>m,s</sub> = 1,  x ∈ {0,1}  (en sam začetek nepretrganega cikla)',
+          'min Σ<sub>t</sub> c<sub>nak,t</sub> · P<sub>uvoz,t</sub> · Δt,  P<sub>uvoz,t</sub> = Σ<sub>i</sub> P<sub>i,t</sub>'],
+        viri: '[G] loči fiksne in pametne porabnike; pametni imajo izmerjen profil, binarno spremenljivko začetka in matriko profila (en. 3.51–3.55). [B] modelira EV z razpoložljivo močjo polnjenja in zahteva poln SOC ob odhodu (en. 3.10–3.17), bojler pa s temperaturnim pasom 58–60 °C.',
+        poskusi: ['Preklopi med A in B in opazuj graf »Razpored porabnikov«: v načinu B se EV, stroja in del bojlerja premaknejo po 22.00 (MT).',
+          'Odhod EV nastavi na 5 h: MT ur je manj, del polnjenja mora iti v VT in prihranek se zmanjša.',
+          'Nastavi ceno VT enako ceni MT: način B izgubi prednost, strošek A in B je enak.',
+          'Okno pralnega stroja zoži na 18–20 h: HEMS nima prostora za premik.'],
+        vprasanja: ['Zakaj se poraba ne zmanjša, strošek pa se?', 'Kaj bi se zgodilo z omrežjem, če bi vsa gospodinjstva ob 22.00 hkrati začela polniti EV? ([B] opozarja na nove konice in zamašitve omrežja.)', 'Zakaj je za HEMS pomemben uporabnikov časovni okvir?']
+      }
+    },
+    {
+      id: 'self', n: 3, title: 'PV + HEMS + porabniki', sub: 'lastna poraba',
+      groups: ['pv', 'loads', 'grid'], loads: ['base', 'hp', 'boiler', 'wash', 'dish'], vis: { pv: true, bat: false },
+      preset(p) { p.pv.on = true; p.bat.on = false; setLoads(p, ['base', 'hp', 'boiler', 'wash', 'dish']); },
+      info: {
+        cilj: 'Razumeti lastno porabo: porabniki naj porabijo PV-energijo takrat, ko je na voljo, ker je doma porabljena kWh vredna več od prodane.',
+        kako: `<p>V vsakem koraku je razlika med proizvodnjo in porabo bodisi <b>prebitek</b> (izvoz) bodisi <b>primanjkljaj</b> (uvoz). Ključ je razlika cen: kWh PV, porabljena doma, prihrani nakupno ceno (privzeto 0,20 €), prodana pa prinese le odkupno ceno (0,06 €). Vsaka kWh, ki jo HEMS premakne iz večera v poldne, prihrani približno 0,14 €.</p>
+<p><b>Način A</b>: naprave tečejo ob nastavljenih urah, ne glede na sonce. <b>Način B</b>: HEMS za vsak korak izračuna efektivno ceno energije – odkupno ceno, če je na voljo prebitek PV, sicer nakupno ceno – in prilagodljive porabnike razporedi v najcenejše korake. Bojler in stroja se premaknejo v opoldanske ure.</p>`,
+        enacbe: ['P<sub>uvoz,t</sub> − P<sub>izvoz,t</sub> = P<sub>poraba,t</sub> − P<sub>PV,t</sub>  (energijska bilanca)',
+          'efektivna cena c<sub>ef,t</sub> = c<sub>odk,t</sub>, če P<sub>PV,t</sub> > P<sub>poraba,t</sub>; sicer c<sub>nak,t</sub>',
+          'delež lastne porabe = (E<sub>PV</sub> − E<sub>izvoz</sub>) / E<sub>PV</sub>',
+          'samooskrba = 1 − E<sub>uvoz</sub> / E<sub>poraba</sub>'],
+        viri: '[G] pokaže, da poleti PV podnevi v celoti pokrije porabo in da HEMS pametne porabnike premakne v ugodna obdobja. [B] na treh majskih dneh pokaže, da se z odzivom odjema krivulja porabe približa krivulji proizvodnje; indeks ujemanja LMI zraste s 36 % na 59 %.',
+        poskusi: ['Preklopi med A in B: delež lastne porabe in samooskrba narasteta, izvoz pade.',
+          'Faktor obsevanja nastavi na 0,3: prebitka skoraj ni več, zato B porabnike razporedi drugače.',
+          'Odkupno ceno nastavi enako nakupni (0,20 €/kWh): premik v poldne ne prinese več prihranka, strošek A in B se izenači.',
+          'Izberi »Zima«: kratek dan omeji, koliko porabe lahko HEMS pokrije s PV.'],
+        vprasanja: ['Zakaj lastna poraba zraste bolj kot samooskrba?', 'Kdaj je izvoz enako dober kot lastna poraba?', 'Zakaj sama premaknjena poraba ne more pokriti večerne konice?']
+      }
+    },
+    {
+      id: 'bat', n: 4, title: 'HEMS + baterija', sub: 'shranjevanje',
+      groups: ['pv', 'bat', 'loads', 'grid', 'hems'], loads: ['base'], vis: { pv: true, bat: true },
+      preset(p) { p.pv.on = true; p.bat.on = true; setLoads(p, ['base']); },
+      info: {
+        cilj: 'Razumeti, kako baterija premakne energijo v času, katere omejitve jo vežejo in zakaj pametno vodenje ni isto kot »polni, ko je prebitek«.',
+        kako: `<p>Baterija shrani prebitek PV in ga vrne zvečer, ko bi sicer kupovali. Omejujejo jo kapaciteta, dovoljeni pas SOC (zaradi življenjske dobe), največja moč polnjenja in praznjenja ter izkoristki: od 1 kWh, poslane v baterijo, je pri η<sub>c</sub> = η<sub>p</sub> = 0,95 nazaj le okoli 0,90 kWh.</p>
+<p><b>Način A</b> (pravilo): polni, ko je prebitek, in prazni, ko je primanjkljaj – cen ne pozna in dan pogosto konča s skoraj prazno baterijo. <b>Način B</b>: HEMS pozna cel dan in z dinamičnim programiranjem po SOC izbere polnjenje in praznjenje z najnižjim skupnim stroškom. Lahko polni iz omrežja v MT, če bo energijo porabil v dražjem VT, in mora dan končati z vsaj začetnim SOC, da začetne energije ne porabi »zastonj«.</p>`,
+        enacbe: ['E<sub>t</sub> = E<sub>t−1</sub> + η<sub>c</sub> · P<sub>pol,t</sub> · Δt − P<sub>praz,t</sub> · Δt / η<sub>p</sub>',
+          'SOC<sub>min</sub> · C ≤ E<sub>t</sub> ≤ SOC<sub>max</sub> · C;  P<sub>pol,t</sub> ≤ P<sub>pol,max</sub> · b<sub>t</sub>,  P<sub>praz,t</sub> ≤ P<sub>praz,max</sub> · (1 − b<sub>t</sub>)',
+          'V<sub>t</sub>(E) = min<sub>E′</sub> [ c<sub>t</sub>(E, E′) + V<sub>t+1</sub>(E′) ]  (Bellmanova enačba, način B)',
+          'C<sub>kor</sub> = C − (E<sub>konec</sub> − E<sub>začetek</sub>) · c̄<sub>nak</sub>'],
+        viri: '[B] uporablja enačbe 3.4–3.9: binarni spremenljivki preprečita hkratno polnjenje in praznjenje, SOC je omejen na 20–80 %, končni SOC je enak polovici kapacitete. [G] doda zmanjšanje moči polnjenja pri visokem SOC, prepoved oddaje baterije v omrežje in zahtevo SOC ≥ 80 % ob 18.00.',
+        poskusi: ['Kapaciteto spreminjaj 0 → 5 → 10 → 20 kWh in opazuj strošek: korist se nad neko velikostjo ne povečuje več, ker je prebitka premalo.',
+          'Izkoristka nastavi na 80 %: izgube zrastejo, polnjenje iz omrežja v načinu B se ne izplača več.',
+          'V skupini »Pametno upravljanje« izključi »Končni SOC ≥ začetni«: B izprazni baterijo do konca dneva, primerjaj korigirani strošek.',
+          'Preklopi na dinamične cene: B polni ob poceni urah in prazni ob večerni konici.'],
+        vprasanja: ['Zakaj je primerjava A in B brez korekcije za končni SOC nepoštena?', 'Zakaj večja baterija ne prinese sorazmerno večjega prihranka?', 'Kdaj se polnjenje iz omrežja izplača? (namig: c<sub>MT</sub> / (η<sub>c</sub>·η<sub>p</sub>) < c<sub>VT</sub>)']
+      }
+    },
+    {
+      id: 'all', n: 5, title: 'Celoten sistem', sub: 'vse skupaj',
+      groups: ['pv', 'loads', 'bat', 'grid', 'hems'], loads: ALL_LOADS, vis: { pv: true, bat: true },
+      preset(p) { p.pv.on = true; p.bat.on = true; setLoads(p, ALL_LOADS); },
+      info: {
+        cilj: 'Videti, kako HEMS hkrati usklajuje proizvodnjo, porabnike, baterijo in omrežje – in zakaj je skupna odločitev boljša od ločenih pravil.',
+        kako: `<p>Vse komponente iz modulov 1–4 delujejo hkrati in tekmujejo za isto energijo: prebitek PV lahko gre v bojler, v pralni stroj, v baterijo ali v omrežje. Pametni HEMS (način B) to reši v štirih korakih:</p>
+<ol><li>za vsak korak izračuna efektivno ceno energije (odkupna cena ob prebitku PV, sicer nakupna);</li>
+<li>zvezne prilagodljive porabnike (EV, TČ, bojler) razporedi v najcenejše korake v njihovih oknih;</li>
+<li>za stroja izbere najcenejši začetek cikla;</li>
+<li>pri tako določeni porabi z dinamičnim programiranjem določi polnjenje in praznjenje baterije.</li></ol>
+<p>To je <b>hevristika</b> (zaporedna razgradnja), ne MILP: MILP bi vse odločitve sprejel hkrati v enem modelu. Preverjanje z MILP v zunanji skripti je pri petih primerih pokazalo, da je hevristika od optimuma oddaljena 0–6,5 %.</p>`,
+        enacbe: ['P<sub>PV,t</sub> − P<sub>omej,t</sub> + P<sub>uvoz,t</sub> + P<sub>praz,t</sub> = Σ<sub>i</sub> P<sub>i,t</sub> + P<sub>pol,t</sub> + P<sub>izvoz,t</sub>',
+          'min Σ<sub>t</sub> (c<sub>nak,t</sub> · P<sub>uvoz,t</sub> − c<sub>odk,t</sub> · P<sub>izvoz,t</sub>) · Δt',
+          'P<sub>uvoz,t</sub> ≤ P<sub>uvoz,max</sub> · u<sub>t</sub>,  P<sub>izvoz,t</sub> ≤ P<sub>izvoz,max</sub> · (1 − u<sub>t</sub>)  (ni hkratnega uvoza in izvoza)'],
+        viri: '[B] in [G] celoten sistem formulirata kot MILP z minimizacijo stroška izmenjave z omrežjem in energijsko bilanco v vsakem koraku ([B] en. 3.1 in 3.40, [G] en. 3.60). [B] pokaže, da optimizacija v treh majskih dneh zniža neto strošek z 12,90 € na 2,03 €.',
+        poskusi: ['Preklopi med A in B ter primerjaj tabelo: kje nastane največji prihranek – pri porabnikih ali pri bateriji?',
+          'Izključi baterijo in nato prilagodljivost TČ: koliko prihranka prinese vsak gradnik posebej?',
+          'Zmanjšaj največjo moč uvoza na 5 kW: HEMS mora porabo razporediti tako, da ne preseže priključka.',
+          'Predvajaj dan in v razdelku »Kaj se dogaja zdaj« spremljaj razlago vsake odločitve.'],
+        vprasanja: ['Zakaj zaporedna razgradnja ni nujno optimalna?', 'Kateri gradnik prispeva največ k prihranku pri privzetih parametrih?', 'Kaj bi HEMS potreboval za delovanje v realni hiši (napovedi, meritve, krmiljenje)?']
+      }
+    }
+  ];
+
+  /* ---------- razlaga trenutnega koraka ---------- */
+  function explainStep(R, RA, k, p, mod, mode, H) {
+    const dt = R.dt, t0 = H.fmtT(k * dt), t1 = H.fmtT((k + 1) * dt);
+    const pv = R.pv[k], load = R.load[k], ch = R.ch[k], dis = R.dis[k], imp = R.imp[k], ex = R.exp[k], cu = R.curt[k];
+    const f = R.flows[k], buy = R.buy[k], sell = R.sell[k];
+    const S = [];
+    const cheap = buy <= Math.min(...R.buy) + 1e-9, dear = buy >= Math.max(...R.buy) - 1e-9;
+    const priceTxt = `nakupna cena je ${fmt(buy, 3)} €/kWh${cheap && !dear ? ' (najnižja v dnevu)' : dear && !cheap ? ' (najvišja v dnevu)' : ''}, odkupna ${fmt(sell, 3)} €/kWh`;
+
+    if (mod.id === 'pv') {
+      if (pv < 1e-3) S.push(`Med ${t0} in ${t1} sonce ne sveti, PV ne proizvaja. HEMS nima energije, ki bi jo usmerjal.`);
+      else {
+        S.push(`PV proizvaja <b>${fmt(pv)} kW</b>. V hiši ni porabnikov ne baterije, zato gre vsa energija v omrežje: izvoz <b>${fmt(ex)} kW</b>, prihodek v tem koraku ${fmt(ex * sell * dt, 3)} €.`);
+        if (cu > 1e-3) S.push(`Proizvodnja presega največjo moč oddaje (${fmt(p.grid.Pexp, 1)} kW), zato razsmernik omeji <b>${fmt(cu)} kW</b> – ta energija je izgubljena.`);
+      }
+      S.push(`Načina A in B se tu ne razlikujeta, ker HEMS nima prilagodljivih naprav.`);
+      return S;
+    }
+
+    // bilanca
+    const net = pv - load;
+    if (pv > 1e-3) {
+      S.push(net > 1e-3
+        ? `PV proizvaja <b>${fmt(pv)} kW</b>, porabniki porabijo <b>${fmt(load)} kW</b> → <b>prebitek ${fmt(net)} kW</b>.`
+        : `PV proizvaja <b>${fmt(pv)} kW</b>, porabniki potrebujejo <b>${fmt(load)} kW</b> → <b>primanjkljaj ${fmt(-net)} kW</b>.`);
+    } else S.push(`${mod.vis.pv ? 'PV ne proizvaja' : 'V tem modulu ni PV'}; porabniki potrebujejo <b>${fmt(load)} kW</b>, ${priceTxt}.`);
+
+    // kam gre prebitek
+    if (net > 1e-3) {
+      const parts = [];
+      if (f.pv2bat > 1e-3) parts.push(`${fmt(f.pv2bat)} kW v baterijo`);
+      if (ex > 1e-3) parts.push(`${fmt(ex)} kW v omrežje po ${fmt(sell, 3)} €/kWh`);
+      if (cu > 1e-3) parts.push(`${fmt(cu)} kW omejeno`);
+      if (parts.length) S.push(`Prebitek gre: ${parts.join(', ')}.`);
+      if (R.B.on) {
+        if (mode === 'A') S.push(f.pv2bat > 1e-3 ? 'Pravilo načina A: prebitek najprej v baterijo, ostanek v omrežje.' : 'Baterija je polna ali na meji moči, zato gre prebitek v omrežje.');
+        else if (ex > 1e-3 && R.soc[k] < p.bat.socMax - 1) S.push('HEMS baterije ne polni do konca, ker je izračunal, da shranjene energije do konca dneva ne bi mogel porabiti dražje od odkupne cene (ali ker baterija polnjenje doseže kasneje).');
+        else if (f.pv2bat > 1e-3) S.push(`HEMS shrani energijo, ker bo zvečer nadomestila nakup po višji ceni, prodaja zdaj pa bi prinesla le ${fmt(sell, 3)} €/kWh.`);
+      } else if (ex > 1e-3 && mod.id !== 'pv') S.push('Ker baterije ni, mora HEMS prebitek prodati – lahko pa vanj premakne prilagodljive porabnike.');
+    } else {
+      const parts = [];
+      if (f.pv2load > 1e-3) parts.push(`${fmt(f.pv2load)} kW iz PV`);
+      if (f.bat2load > 1e-3) parts.push(`${fmt(f.bat2load)} kW iz baterije`);
+      if (f.grid2load > 1e-3) parts.push(`${fmt(f.grid2load)} kW iz omrežja`);
+      if (parts.length && load > 1e-3) S.push(`Porabo pokrivajo: ${parts.join(', ')}.`);
+      if (pv > 1e-3) S.push(`Cena: ${priceTxt}.`);
+      if (R.B.on && mode === 'B') {
+        if (f.grid2bat > 1e-3) S.push(`HEMS <b>polni baterijo iz omrežja (${fmt(f.grid2bat)} kW)</b>, ker je energija zdaj poceni; porabil jo bo, ko bo nakup dražji (izplača se, če c<sub>poceni</sub>/(η<sub>c</sub>·η<sub>p</sub>) < c<sub>drago</sub>).`);
+        else if (dis > 1e-3) S.push('HEMS prazni baterijo, ker je to ura, v kateri je shranjena energija najbolj vredna, oz. bo baterija do konca dneva znova napolnjena.');
+        else if (load > 1e-3 && R.soc[k] > p.bat.socMin + 1) S.push('HEMS energijo v bateriji zadrži za dražje ure ali za pogoj končnega SOC, zato zdaj kupuje.');
+      } else if (R.B.on && mode === 'A' && dis > 1e-3) S.push('Pravilo načina A: ob primanjkljaju najprej baterija, nato omrežje.');
+      else if (R.B.on && mode === 'A' && imp > 1e-3 && R.soc[k] <= p.bat.socMin + 0.5) S.push('Baterija je na SOC<sub>min</sub>, zato ves primanjkljaj pride iz omrežja.');
+    }
+
+    // prilagodljivi porabniki
+    const L = p.loads, sc = R.sched, scA = RA.sched;
+    const run = [];
+    ['wash', 'dish'].forEach((key) => {
+      if (!L[key].on || !mod.loads.includes(key)) return;
+      if (sc[key][k] > 1e-3) {
+        const sB = sc[key + 'Start'], sA = scA[key + 'Start'];
+        run.push(`${H.LOAD_NAMES[key].toLowerCase()} deluje (${fmt(sc[key][k])} kW)` + (mode === 'B' && sA !== undefined && sA !== sB ? ` – HEMS je začetek premaknil z ${H.fmtT(sA * dt)} na ${H.fmtT(sB * dt)}, ker je takrat energija cenejša` : mode === 'A' ? ' ob nastavljeni uri' : ''));
+      }
+    });
+    ['ev', 'boiler'].forEach((key) => {
+      if (!L[key].on || !mod.loads.includes(key)) return;
+      if (sc[key][k] > 1e-3) run.push(`${key === 'ev' ? 'EV se polni' : 'bojler greje'} z ${fmt(sc[key][k])} kW` + (mode === 'B' ? (net > 1e-3 || f.pv2load >= sc[key][k] - 1e-3 ? ' – iz prebitka PV' : cheap ? ' – v najcenejši uri' : ' – v najcenejših razpoložljivih urah okna') : ' (način A: takoj ob začetku okna/nastavljeni uri)'));
+    });
+    if (L.hp.on && mod.loads.includes('hp') && sc.hp[k] > 1e-3 && mode === 'B' && L.hp.flex) {
+      const d = sc.hp[k] - (scA.hp ? scA.hp[k] : 0);
+      if (Math.abs(d) > 0.05) run.push(`toplotna črpalka dela z ${fmt(sc.hp[k])} kW (${d > 0 ? 'več' : 'manj'} kot v načinu A – HEMS je porabo v 6-urnem bloku premaknil v cenejše korake)`);
+    }
+    if (run.length) S.push('Prilagodljivi porabniki: ' + run.join('; ') + '.');
+    else if (mod.loads.some((key) => ['wash', 'dish', 'ev', 'boiler'].includes(key) && L[key].on)) S.push('Trenutno ne deluje noben prilagodljiv porabnik' + (mode === 'B' ? ' – HEMS jih je razporedil v cenejše korake.' : '.'));
+    return S;
+  }
+
+  window.HEMS_MODULES = { LIST, explainStep };
+})();
+
+</script>
+<script>
+/* ==========================================================================
+   Animirana hiša – vizualizacija tokov moči (SVG, posodablja se po korakih)
+   ========================================================================== */
+(function () {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const fmt = (v, d = 2) => (isFinite(v) ? v : 0).toLocaleString('sl-SI', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const COL = { pv: '#eda100', grid: '#6250d6', bat: '#eb6834', base: '#2a78d6', hp: '#1baf7a', boiler: '#6250d6', wash: '#e87ba4', dish: '#008300', ev: '#e34948' };
+
+  // Poti žic: smer zapisa = "normalna" smer toka (vir → HEMS ali HEMS → porabnik)
+  const WIRES = {
+    pv: 'M470,206 L470,240 L690,240 L690,430',
+    grid: 'M58,340 L58,556 L706,556 L706,480',
+    bat: 'M134,490 L134,537 L674,537 L674,480',
+    base: 'M668,430 L668,300 L463,300 L463,326',
+    boiler: 'M712,430 L712,372 L658,372 L658,356',
+    dish: 'M655,463 L548,463 L548,474',
+    wash: 'M655,449 L384,449 L384,474',
+    ev: 'M655,418 L294,418 L294,432',
+    hp: 'M728,462 L808,462 L808,470'
+  };
+  const LABEL_POS = { // položaj oznake moči ob žici
+    pv: [478, 232, 'start'], grid: [380, 576, 'middle'], bat: [460, 531, 'middle'], base: [560, 293, 'middle'],
+    boiler: [718, 395, 'start'], dish: [600, 457, 'middle'], wash: [480, 443, 'middle'], ev: [470, 412, 'middle'], hp: [765, 455, 'middle']
+  };
+
+  const S = {};
+  const el = (id) => S.root.querySelector('#' + id);
+
+  function build(container) {
+    container.innerHTML = `
+<svg viewBox="0 0 1000 600" class="house" role="img" aria-label="Animirana hiša s tokovi moči">
+  <defs>
+    <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop id="sky1" offset="0" stop-color="#bfe0f7"/><stop id="sky2" offset="1" stop-color="#eaf5fc"/></linearGradient>
+    <linearGradient id="earthG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cbb79a"/><stop offset="1" stop-color="#a88e6c"/></linearGradient>
+    <radialGradient id="sunG"><stop offset="0" stop-color="#fff6c8"/><stop offset=".55" stop-color="#ffd23f"/><stop offset="1" stop-color="#ffb000" stop-opacity="0"/></radialGradient>
+    <clipPath id="tankClip"><rect x="642" y="300" width="32" height="52" rx="8"/></clipPath>
+    <clipPath id="batClip"><rect x="116" y="402" width="36" height="62" rx="4"/></clipPath>
+  </defs>
+  <rect x="0" y="0" width="1000" height="522" fill="url(#skyG)"/>
+  <g id="stars" opacity="0">${[[90, 60], [170, 120], [260, 40], [620, 70], [700, 100], [880, 110], [960, 180], [350, 90]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#fff"/>`).join('')}</g>
+  <g id="sun"><circle r="46" fill="url(#sunG)"/><circle r="20" fill="#ffd23f"/></g>
+  <g id="moon" opacity="0"><circle r="18" fill="#f3f1e6"/><circle cx="8" cy="-5" r="16" fill="#1b2340" id="moonCut"/></g>
+  <g id="clouds">
+    ${cloud(150, 95, 1)}${cloud(560, 60, 1.25)}${cloud(860, 140, .9)}
+  </g>
+  <text id="clockBig" x="24" y="44" class="sc-clock">12.00</text>
+  <text id="priceTxt" x="976" y="34" class="sc-price" text-anchor="end"></text>
+  <text id="modeTxt" x="976" y="54" class="sc-sub" text-anchor="end"></text>
+
+  <!-- tla -->
+  <rect x="0" y="520" width="1000" height="80" fill="url(#earthG)"/>
+  <rect x="0" y="516" width="1000" height="8" fill="#8fbf6a"/>
+
+  <!-- omrežni drog -->
+  <g class="pole"><rect x="54" y="250" width="8" height="270" fill="#6d6a63"/><rect x="28" y="262" width="60" height="6" fill="#6d6a63"/>
+    <rect x="34" y="282" width="48" height="5" fill="#6d6a63"/><path d="M0,268 Q30,290 58,265 M0,288 Q30,306 58,284" stroke="#55524c" fill="none" stroke-width="1.5"/>
+    <text x="58" y="242" class="sc-lab sky" text-anchor="middle">Omrežje</text></g>
+  <g id="meter"><rect x="68" y="296" width="66" height="40" rx="6" class="box"/><text x="101" y="311" class="sc-mini" text-anchor="middle">števec</text>
+    <text id="meterTxt" x="101" y="328" class="sc-val" text-anchor="middle">0 kW</text></g>
+
+  <!-- garaža -->
+  <rect x="108" y="340" width="192" height="180" fill="#ece6dc" stroke="#b9b1a4"/>
+  <rect x="100" y="330" width="208" height="14" fill="#8a7f72"/>
+  <text x="204" y="362" class="sc-lab" text-anchor="middle">Garaža</text>
+  <!-- baterija -->
+  <g id="battery"><rect x="114" y="398" width="40" height="70" rx="6" class="box"/>
+    <rect x="127" y="392" width="14" height="8" rx="2" fill="#b9b1a4"/>
+    <g clip-path="url(#batClip)"><rect id="batFill" x="116" y="402" width="36" height="62" fill="${COL.bat}"/></g>
+    <text id="batSoc" x="134" y="438" class="sc-val inv" text-anchor="middle">50 %</text>
+    <text x="134" y="384" class="sc-mini" text-anchor="middle">baterija</text>
+    <text id="batState" x="134" y="482" class="sc-mini" text-anchor="middle"></text></g>
+  <!-- polnilnica in EV -->
+  <g id="charger"><rect x="284" y="430" width="16" height="30" rx="3" fill="#3d3b37"/><circle id="evLed" cx="292" cy="438" r="3" fill="#555"/><text x="200" y="392" class="sc-mini" text-anchor="middle">polnilnica EV</text></g>
+  <g id="car">
+    <path id="evCable" d="M292,458 C292,490 260,470 236,482" stroke="#222" stroke-width="3" fill="none"/>
+    <path d="M160,505 L166,478 Q172,462 190,460 L232,460 Q246,462 254,478 L262,486 Q272,490 272,500 L272,508 L160,508 Z" fill="${COL.ev}"/>
+    <path d="M178,476 L186,465 L214,465 L214,476 Z M218,476 L218,465 L236,465 L246,476 Z" fill="#cfe6f5"/>
+    <circle cx="182" cy="508" r="9" fill="#2b2a28"/><circle cx="248" cy="508" r="9" fill="#2b2a28"/>
+    <rect x="170" y="514" width="94" height="5" rx="2" fill="#ddd"/><rect id="evBar" x="170" y="514" width="0" height="5" rx="2" fill="#0f7b3e"/>
+  </g>
+  <text id="carAway" x="200" y="470" class="sc-mini" text-anchor="middle" opacity="0">vozilo na poti</text>
+
+  <!-- hiša -->
+  <polygon points="278,252 530,108 782,252" fill="#a34b39"/>
+  <polygon points="300,250 530,124 760,250" fill="#b85a45"/>
+  <g id="pvPanels" transform="translate(352,244) rotate(-29.75)">
+    ${[0, 1, 2, 3, 4].map((i) => `<g transform="translate(${i * 40},0)"><rect x="0" y="3" width="37" height="26" fill="#1e3a5f" stroke="#c9d6e3" stroke-width="1"/><path d="M0,16 L37,16 M12,3 L12,29 M25,3 L25,29" stroke="#3d5f86" stroke-width=".8"/></g>`).join('')}
+    <rect id="pvGlow" x="0" y="3" width="197" height="26" fill="#ffe680" opacity="0"/>
+  </g>
+  <text id="pvLab" x="318" y="168" class="sc-lab sky" text-anchor="end">Fotovoltaika</text>
+  <text id="pvTxt" x="318" y="186" class="sc-val sky" text-anchor="end">0 kW</text>
+  <rect x="300" y="250" width="460" height="270" fill="#f6efe2" stroke="#b9b1a4"/>
+  <line x1="300" y1="385" x2="760" y2="385" stroke="#b9b1a4" stroke-width="3"/>
+  <line x1="560" y1="250" x2="560" y2="385" stroke="#d8cfbf"/><line x1="440" y1="385" x2="440" y2="520" stroke="#d8cfbf"/><line x1="620" y1="385" x2="620" y2="520" stroke="#d8cfbf"/>
+  <text x="312" y="270" class="sc-room">dnevna soba</text><text x="572" y="270" class="sc-room">kopalnica</text>
+  <text x="312" y="402" class="sc-room">pralnica</text><text x="452" y="402" class="sc-room">kuhinja</text><text x="632" y="402" class="sc-room">tehnični prostor</text>
+  <!-- okna -->
+  ${[[330, 300], [470, 330], [600, 300]].map(([x, y], i) => `<rect class="win" id="win${i}" x="${x}" y="${y - 22}" width="${i === 1 ? 0 : 36}" height="30" rx="2" fill="#cfe6f5" stroke="#9b917f"/>`).join('')}
+  <!-- osnovna poraba: svetilka, TV, hladilnik -->
+  <g id="base"><line x1="420" y1="250" x2="420" y2="282" stroke="#555"/><path d="M406,282 L434,282 L428,270 L412,270 Z" fill="#666"/>
+    <circle id="lampGlow" cx="420" cy="292" r="22" fill="#ffe680" opacity="0"/>
+    <rect x="378" y="320" width="64" height="40" rx="3" fill="#2b2a28"/><rect id="tvScreen" x="382" y="324" width="56" height="32" fill="#3a3a3a"/>
+    <rect x="452" y="328" width="22" height="52" rx="3" fill="#e7e7e7" stroke="#aaa"/>
+    <text id="baseTxt" x="410" y="377" class="sc-val" text-anchor="middle">0 kW</text>
+    <text x="410" y="315" class="sc-mini" text-anchor="middle">osnovna poraba</text></g>
+  <!-- bojler -->
+  <g id="boiler"><rect x="640" y="298" width="36" height="56" rx="9" class="box"/>
+    <g clip-path="url(#tankClip)"><rect id="tankFill" x="642" y="352" width="32" height="0" fill="#e35d4a" opacity=".85"/></g>
+    <text x="684" y="312" class="sc-mini">el. bojler</text><text id="boilerTxt" x="684" y="328" class="sc-val">0 kW</text>
+    <text id="boilerPct" x="684" y="343" class="sc-mini"></text></g>
+  <!-- pralni stroj -->
+  <g id="wash"><rect x="362" y="474" width="46" height="46" rx="4" class="box"/><circle cx="385" cy="499" r="14" fill="#dfe9f2" stroke="#999"/>
+    <g id="drum" class="spin"><path d="M385,487 L385,511 M373,499 L397,499" stroke="${COL.wash}" stroke-width="3"/></g>
+    <text x="356" y="486" class="sc-mini" text-anchor="end">pralni stroj</text><text id="washTxt" x="356" y="500" class="sc-val" text-anchor="end">0 kW</text>
+    <text id="washStart" x="356" y="513" class="sc-mini" text-anchor="end"></text></g>
+  <!-- pomivalni stroj -->
+  <g id="dish"><rect x="526" y="474" width="46" height="46" rx="4" class="box"/><rect x="530" y="478" width="38" height="6" fill="#ccc"/>
+    <rect id="dishLed" x="560" y="479" width="5" height="4" fill="#555"/>
+    <text x="578" y="486" class="sc-mini">pomivalni</text><text id="dishTxt" x="578" y="500" class="sc-val">0 kW</text>
+    <text id="dishStart" x="578" y="513" class="sc-mini"></text></g>
+  <!-- HEMS -->
+  <g id="hub"><rect x="652" y="428" width="76" height="54" rx="8" fill="#0b0b0b"/><text x="690" y="452" class="sc-hub" text-anchor="middle">HEMS</text>
+    <text id="hubMode" x="690" y="470" class="sc-hub2" text-anchor="middle">način B</text></g>
+  <!-- toplotna črpalka -->
+  <g id="hp"><rect x="782" y="470" width="96" height="50" rx="5" class="box"/><circle cx="808" cy="495" r="17" fill="#e9eef1" stroke="#999"/>
+    <g id="fan" class="spin"><path d="M808,480 Q814,495 808,495 Q802,495 808,480 M823,495 Q808,501 808,495 Q808,489 823,495 M808,510 Q802,495 808,495 Q814,495 808,510 M793,495 Q808,489 808,495 Q808,501 793,495" fill="${COL.hp}"/></g>
+    <text x="830" y="446" class="sc-lab sky" text-anchor="middle">Toplotna črpalka</text><text id="hpTxt" x="832" y="500" class="sc-val">0 kW</text></g>
+
+  <g id="wires"></g>
+</svg>`;
+    S.root = container;
+    const g = el('wires');
+    let html = '';
+    for (const [k, d] of Object.entries(WIRES)) {
+      html += `<path class="wire-base" id="b_${k}" d="${d}"/><path id="w_${k}" class="wire" d="${d}" stroke="${COL[k]}"/>`;
+      const [x, y, a] = LABEL_POS[k];
+      html += `<text id="l_${k}" x="${x}" y="${y}" text-anchor="${a}" class="sc-wl"${['pv', 'grid', 'bat'].includes(k) ? '' : ' display="none"'}></text>`;
+    }
+    g.innerHTML = html;
+    // žice pod napravami: premaknemo skupino žic za ozadje hiše, a nad zidove
+    const svg = S.root.querySelector('svg');
+    svg.insertBefore(g, el('base'));
+  }
+
+  function cloud(x, y, s) {
+    return `<g class="cloud" transform="translate(${x},${y}) scale(${s})"><ellipse cx="0" cy="0" rx="34" ry="16" fill="#fff"/><ellipse cx="26" cy="-8" rx="26" ry="18" fill="#fff"/><ellipse cx="-24" cy="2" rx="22" ry="12" fill="#fff"/><ellipse cx="50" cy="4" rx="22" ry="12" fill="#fff"/></g>`;
+  }
+
+  function setWire(key, P, reverse) {
+    const w = el('w_' + key), l = el('l_' + key);
+    const on = P > 1e-3;
+    w.style.opacity = on ? 1 : 0;
+    w.style.strokeWidth = (3 + 6 * Math.min(1, P / 7)).toFixed(1);
+    w.style.animationDuration = Math.max(0.18, 1.1 - 0.13 * P).toFixed(2) + 's';
+    w.style.animationDirection = reverse ? 'reverse' : 'normal';
+    l.textContent = on ? fmt(P) + ' kW' : '';
+  }
+  const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const hex = (a) => '#' + a.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+  const mix = (a, b, t) => { t = Math.max(0, Math.min(1, t)); const A = rgb(a), B = rgb(b); return hex(A.map((v, i) => v * (1 - t) + B[i] * t)); };
+  const smooth = (x) => Math.max(0, Math.min(1, x));
+
+  function update(R, k, p, mode, H) {
+    const dt = R.dt, t = (k + 0.5) * dt, pv = p.pv;
+    // nebo in sonce
+    const day = smooth(Math.min((t - pv.sunrise + 0.6) / 1.2, (pv.sunset + 0.6 - t) / 1.2));
+    const dawn = smooth(1 - Math.abs(Math.min(Math.abs(t - pv.sunrise), Math.abs(t - pv.sunset))) / 1.2) * (1 - Math.abs(day - 0.5) * 1.2);
+    const skyTop = mix(mix('#141b33', '#7fbbe8', day), '#f2a76b', Math.max(0, dawn) * 0.6);
+    el('sky1').setAttribute('stop-color', skyTop);
+    el('sky2').setAttribute('stop-color', mix(mix('#2b3557', '#e3f2fb', day), '#f7c48f', Math.max(0, dawn) * 0.7));
+    el('stars').setAttribute('opacity', (1 - day).toFixed(2));
+    const f = (t - pv.sunrise) / (pv.sunset - pv.sunrise);
+    const sunUp = f > 0 && f < 1;
+    if (sunUp) el('sun').setAttribute('transform', `translate(${80 + 840 * f},${360 - 300 * Math.sin(Math.PI * f)})`);
+    el('sun').setAttribute('opacity', sunUp ? 1 : 0);
+    const fm = ((t - pv.sunset + 24) % 24) / ((pv.sunrise - pv.sunset + 24) % 24 || 1);
+    el('moon').setAttribute('opacity', sunUp ? 0 : 1);
+    if (!sunUp) el('moon').setAttribute('transform', `translate(${120 + 760 * fm},${150 - 80 * Math.sin(Math.PI * fm)})`);
+    el('moonCut').setAttribute('fill', skyTop);
+    el('clouds').setAttribute('opacity', (Math.max(0, Math.min(1, 1.15 - pv.factor)) * (0.4 + 0.6 * day)).toFixed(2));
+    el('clockBig').textContent = `${H.fmtT(k * dt)}–${H.fmtT((k + 1) * dt)}`;
+    el('clockBig').setAttribute('fill', day > 0.5 ? '#0b0b0b' : '#f0efec');
+    el('priceTxt').textContent = `nakup ${fmt(R.buy[k], 3)} · odkup ${fmt(R.sell[k], 3)} €/kWh`;
+    el('priceTxt').setAttribute('fill', day > 0.5 ? '#0b0b0b' : '#f0efec');
+    el('modeTxt').textContent = mode === 'A' ? 'način A – osnovno upravljanje' : 'način B – pametno upravljanje HEMS';
+    el('modeTxt').setAttribute('fill', day > 0.5 ? '#52514e' : '#c3c2b7');
+    S.root.querySelectorAll('.sky').forEach((n) => { n.style.fill = day > 0.5 ? '#0b0b0b' : '#f0efec'; });
+
+    // PV
+    const ppv = R.pv[k];
+    el('pvGlow').setAttribute('opacity', pv.Pp > 0 ? (0.45 * ppv / (pv.Pp * pv.peak || 1)).toFixed(2) : 0);
+    el('pvTxt').textContent = fmt(ppv) + ' kW' + (R.curt[k] > 1e-3 ? ` (omejeno ${fmt(R.curt[k])})` : '');
+    setWire('pv', R.pvUsed[k], false);
+
+    // omrežje
+    const imp = R.imp[k], ex = R.exp[k];
+    setWire('grid', imp > 1e-3 ? imp : ex, imp <= 1e-3);
+    el('meterTxt').textContent = imp > 1e-3 ? `↓ ${fmt(imp)} kW` : ex > 1e-3 ? `↑ ${fmt(ex)} kW` : '0 kW';
+    el('meterTxt').setAttribute('fill', imp > 1e-3 ? '#6250d6' : ex > 1e-3 ? '#0f7b3e' : '#52514e');
+    el('l_grid').textContent = imp > 1e-3 ? `uvoz ${fmt(imp)} kW` : ex > 1e-3 ? `izvoz ${fmt(ex)} kW` : '';
+
+    // baterija
+    const ch = R.ch[k], dis = R.dis[k];
+    setWire('bat', dis > 1e-3 ? dis : ch, ch > 1e-3);
+    if (R.B.on) {
+      const s = Math.max(0, Math.min(100, R.soc[k]));
+      el('batFill').setAttribute('y', 402 + 62 * (1 - s / 100)); el('batFill').setAttribute('height', 62 * s / 100);
+      el('batSoc').textContent = fmt(s, 0) + ' %';
+      el('batSoc').classList.toggle('inv', s >= 45);
+      el('batState').textContent = ch > 1e-3 ? 'polnjenje' : dis > 1e-3 ? 'praznjenje' : 'mirovanje';
+      el('battery').setAttribute('opacity', 1);
+    } else { el('battery').setAttribute('opacity', 0.3); el('batState').textContent = 'izključena'; }
+    el('l_bat').textContent = ch > 1e-3 ? `polnjenje ${fmt(ch)} kW` : dis > 1e-3 ? `praznjenje ${fmt(dis)} kW` : '';
+
+    // porabniki
+    const L = p.loads, sc = R.sched;
+    const val = (key) => (sc[key] ? sc[key][k] : 0);
+    ['base', 'boiler', 'wash', 'dish', 'ev', 'hp'].forEach((key) => setWire(key, val(key), false));
+    // osnovna poraba – luči ponoči, TV zvečer
+    const night = day < 0.5;
+    el('lampGlow').setAttribute('opacity', L.base.on && night ? 0.75 : 0);
+    ['win0', 'win2'].forEach((w) => el(w).setAttribute('fill', night ? (L.base.on ? '#ffe28a' : '#3b4260') : '#cfe6f5'));
+    el('tvScreen').setAttribute('fill', L.base.on && (t > 18 || t < 0.5) ? '#5aa9e6' : '#3a3a3a');
+    el('baseTxt').textContent = fmt(val('base')) + ' kW';
+    el('base').setAttribute('opacity', L.base.on ? 1 : 0.35);
+    // bojler – delež dovedene energije
+    let eb = 0; for (let i = 0; i <= k; i++) eb += (sc.boiler ? sc.boiler[i] : 0) * dt;
+    const fb = L.boiler.on && L.boiler.E > 0 ? Math.min(1, eb / L.boiler.E) : 0;
+    el('tankFill').setAttribute('y', 352 - 52 * fb); el('tankFill').setAttribute('height', 52 * fb);
+    el('boilerTxt').textContent = fmt(val('boiler')) + ' kW';
+    el('boilerPct').textContent = L.boiler.on ? `segreto ${fmt(100 * fb, 0)} %` : 'izključen';
+    el('boiler').setAttribute('opacity', L.boiler.on ? 1 : 0.35);
+    // stroja
+    ['wash', 'dish'].forEach((key) => {
+      const v = val(key);
+      el(key + 'Txt').textContent = fmt(v) + ' kW';
+      const st = sc[key + 'Start'];
+      el(key + 'Start').textContent = L[key].on ? (st !== undefined ? `start ${H.fmtT(st * dt)}` : 'ni izvedljivo') : 'izključen';
+      el(key).setAttribute('opacity', L[key].on ? 1 : 0.35);
+    });
+    spin('drum', val('wash'), 0.4);
+    el('dishLed').setAttribute('fill', val('dish') > 1e-3 ? '#2ecc71' : '#555');
+    // toplotna črpalka
+    el('hpTxt').textContent = fmt(val('hp')) + ' kW';
+    spin('fan', val('hp'), 0.35);
+    el('hp').setAttribute('opacity', L.hp.on ? 1 : 0.35);
+    // EV
+    const present = L.ev.on && H.inWindow(k, dt, L.ev.s, L.ev.e);
+    el('car').setAttribute('opacity', present ? 1 : 0);
+    el('carAway').setAttribute('opacity', present || !L.ev.on ? 0 : 1);
+    el('carAway').textContent = L.ev.on ? 'vozilo na poti' : '';
+    if (present) {
+      const N = R.N, a = Math.round(L.ev.s / dt) % N; let e = 0;
+      for (let i = 0; i < N; i++) { const j = (a + i) % N; e += (sc.ev ? sc.ev[j] : 0) * dt; if (j === k) break; }
+      el('evBar').setAttribute('width', 94 * Math.min(1, L.ev.E > 0 ? e / L.ev.E : 0));
+    }
+    el('evLed').setAttribute('fill', val('ev') > 1e-3 ? '#2ecc71' : '#555');
+    el('hubMode').textContent = mode === 'A' ? 'način A' : 'način B';
+  }
+  function spin(id, P, base) {
+    const g = el(id);
+    g.style.animationPlayState = P > 1e-3 ? 'running' : 'paused';
+    g.style.animationDuration = Math.max(base, 2.2 - 0.6 * P).toFixed(2) + 's';
+  }
+
+  // prikaz/skrivanje komponent glede na učni modul
+  const VIS_IDS = {
+    pv: ['pvPanels', 'pvLab', 'pvTxt', 'w_pv', 'l_pv'], bat: ['battery', 'w_bat', 'l_bat'],
+    base: ['base', 'w_base'], hp: ['hp', 'w_hp'], boiler: ['boiler', 'w_boiler'], wash: ['wash', 'w_wash'],
+    dish: ['dish', 'w_dish'], ev: ['car', 'carAway', 'charger', 'w_ev']
+  };
+  function setVisible(vis) {
+    S.vis = vis;
+    for (const [k, ids] of Object.entries(VIS_IDS)) ids.concat(ids.filter((i) => i.startsWith('w_')).map((i) => 'b_' + i.slice(2))).forEach((id) => { const n = el(id); if (n) n.style.display = vis[k] === false ? 'none' : ''; });
+  }
+  window.HouseScene = { build, update, setVisible, COL };
+})();
+
+</script>
+<script>
+/* ==========================================================================
+   HEMS – uporabniški vmesnik (vizualizacija, grafi, interakcija)
+   ========================================================================== */
+(function () {
+  'use strict';
+  const H = window.HEMS;
+  const $ = (id) => document.getElementById(id);
+  const fmt = (v, d = 2) => (isFinite(v) ? v : 0).toLocaleString('sl-SI', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (v, d = 1) => fmt(100 * v, d) + ' %';
+
+  const COL = {
+    pv: '#eda100', load: '#2a78d6', bat: '#eb6834', grid: '#6250d6',
+    base: '#2a78d6', hp: '#1baf7a', boiler: '#6250d6', wash: '#e87ba4', dish: '#008300', ev: '#e34948',
+    buy: '#2a78d6', sell: '#1baf7a', A: '#2a78d6', B: '#eb6834'
+  };
+
+  const state = {
+    p: H.clone(H.DEFAULTS),
+    mode: 'B',
+    module: 'all',
+    modParams: {},
+    idx: 0,
+    res: null,
+    timer: null,
+    finishedShown: false
+  };
+
+  /* ===================== PARAMETRI ===================== */
+  const num = (path, label, unit, min, max, step, extra = {}) => ({ type: 'num', path, label, unit, min, max, step, ...extra });
+  const chk = (path, label, extra = {}) => ({ type: 'chk', path, label, ...extra });
+  const sel = (path, label, options, extra = {}) => ({ type: 'sel', path, label, options, ...extra });
+
+  const SCHEMA = [
+    { key: 'pv', title: 'Proizvodnja – fotovoltaika (PV)', color: COL.pv, open: true, fields: [
+      chk('pv.on', 'PV vključena'),
+      num('pv.Pp', 'Nazivna moč', 'kWp', 0, 20, 0.5, { slider: true }),
+      sel('pv.season', 'Dnevni profil (letni čas)', Object.entries(H.SEASONS).map(([k, v]) => [k, v.label])),
+      num('pv.factor', 'Faktor obsevanja (oblačnost)', '×', 0, 1.2, 0.05, { slider: true }),
+      num('pv.sunrise', 'Vzhod sonca', 'h', 4, 10, 0.25, { slider: true }),
+      num('pv.sunset', 'Zahod sonca', 'h', 15, 22, 0.25, { slider: true }),
+      num('pv.peak', 'Najvišja izkoriščenost (vrh krivulje)', 'p.u.', 0.2, 1, 0.01)
+    ] },
+    { key: 'loads', title: 'Poraba – gospodinjski porabniki', color: COL.load, open: true, loads: true },
+    { key: 'bat', title: 'Baterijski hranilnik', color: COL.bat, open: false, fields: [
+      chk('bat.on', 'Baterija vključena'),
+      num('bat.cap', 'Kapaciteta', 'kWh', 0, 30, 0.5, { slider: true }),
+      num('bat.Pch', 'Največja moč polnjenja', 'kW', 0.5, 15, 0.1, { slider: true }),
+      num('bat.Pdis', 'Največja moč praznjenja', 'kW', 0.5, 15, 0.1, { slider: true }),
+      num('bat.soc0', 'Začetni SOC', '%', 0, 100, 1, { slider: true }),
+      num('bat.socMin', 'Minimalni SOC', '%', 0, 50, 1),
+      num('bat.socMax', 'Maksimalni SOC', '%', 50, 100, 1),
+      num('bat.etaCh', 'Izkoristek polnjenja', '%', 70, 100, 0.5),
+      num('bat.etaDis', 'Izkoristek praznjenja', '%', 70, 100, 0.5)
+    ] },
+    { key: 'grid', title: 'Električno omrežje in cene', color: COL.grid, open: false, fields: [
+      sel('grid.tariff', 'Tarifni model', [['dvotarifna', 'Dvotarifni (VT/MT)'], ['dinamicna', 'Dinamične urne cene (demo krivulja)']]),
+      num('grid.vt', 'Nakupna cena VT', '€/kWh', 0, 0.6, 0.005, { show: (p) => p.grid.tariff === 'dvotarifna', slider: true }),
+      num('grid.mt', 'Nakupna cena MT', '€/kWh', 0, 0.6, 0.005, { show: (p) => p.grid.tariff === 'dvotarifna', slider: true }),
+      num('grid.vtStart', 'Začetek VT', 'h', 0, 24, 0.5, { show: (p) => p.grid.tariff === 'dvotarifna' }),
+      num('grid.vtEnd', 'Konec VT', 'h', 0, 24, 0.5, { show: (p) => p.grid.tariff === 'dvotarifna' }),
+      num('grid.sell', 'Odkupna cena (oddaja)', '€/kWh', 0, 0.4, 0.005, { show: (p) => p.grid.tariff === 'dvotarifna', slider: true }),
+      num('grid.dynAdd', 'Dodatek k borzni ceni (omrežnina, dajatve)', '€/kWh', 0, 0.3, 0.005, { show: (p) => p.grid.tariff === 'dinamicna' }),
+      num('grid.dynSellFactor', 'Odkup = faktor × borzna cena', '×', 0, 1.5, 0.05, { show: (p) => p.grid.tariff === 'dinamicna' }),
+      num('grid.Pimp', 'Največja moč uvoza (priključek)', 'kW', 1, 30, 0.5),
+      num('grid.Pexp', 'Največja moč oddaje', 'kW', 0, 30, 0.5)
+    ] },
+    
+    { key: 'hems', title: 'Pametno upravljanje (način B)', color: '#0b0b0b', open: false, fields: [
+      chk('hems.gridCharge', 'Dovoli polnjenje baterije iz omrežja (ob nizki ceni)'),
+      chk('hems.terminal', 'Končni SOC ≥ začetni SOC (brez »praznjenja na zalogo«)')
+    ] }
+  ];
+
+  const LOAD_FIELDS = {
+    base: [num('loads.base.E', 'Dnevna energija', 'kWh', 0, 30, 0.5, { slider: true })],
+    hp: [num('loads.hp.E', 'Dnevna električna energija', 'kWh', 0, 40, 0.5, { slider: true }),
+      num('loads.hp.Pmax', 'Največja električna moč', 'kW', 0.5, 8, 0.1),
+      chk('loads.hp.flex', 'Prilagodljiva znotraj 6-urnih blokov')],
+    boiler: [num('loads.boiler.E', 'Potrebna energija', 'kWh', 0, 15, 0.5, { slider: true }),
+      num('loads.boiler.P', 'Moč grelca', 'kW', 0.5, 6, 0.1, { slider: true }),
+      num('loads.boiler.s', 'Okno od', 'h', 0, 24, 0.5), num('loads.boiler.e', 'Okno do', 'h', 0, 24, 0.5),
+      num('loads.boiler.start', 'Vklop v načinu A', 'h', 0, 23.75, 0.25, { slider: true })],
+    wash: [num('loads.wash.P', 'Povprečna moč cikla', 'kW', 0.2, 3, 0.1, { slider: true }), num('loads.wash.D', 'Trajanje cikla', 'h', 0.25, 4, 0.25),
+      num('loads.wash.s', 'Okno od', 'h', 0, 24, 0.5), num('loads.wash.e', 'Okno do', 'h', 0, 24, 0.5),
+      num('loads.wash.start', 'Začetek v načinu A', 'h', 0, 23.75, 0.25, { slider: true })],
+    dish: [num('loads.dish.P', 'Povprečna moč cikla', 'kW', 0.2, 3, 0.1, { slider: true }), num('loads.dish.D', 'Trajanje cikla', 'h', 0.25, 4, 0.25),
+      num('loads.dish.s', 'Okno od', 'h', 0, 24, 0.5), num('loads.dish.e', 'Okno do', 'h', 0, 24, 0.5),
+      num('loads.dish.start', 'Začetek v načinu A', 'h', 0, 23.75, 0.25, { slider: true })],
+    ev: [num('loads.ev.E', 'Potrebna energija do odhoda', 'kWh', 0, 60, 0.5, { slider: true }),
+      num('loads.ev.P', 'Moč polnilnice', 'kW', 1.4, 22, 0.1, { slider: true }),
+      num('loads.ev.s', 'Prihod domov', 'h', 0, 24, 0.5, { slider: true }), num('loads.ev.e', 'Odhod', 'h', 0, 24, 0.5, { slider: true })]
+  };
+  const LOAD_NOTES = {
+    base: 'Neprekinjena poraba (hladilnik, razsvetljava, kuhanje …); profil z jutranjo in večerno konico.',
+    hp: 'Referenčni profil je višji ponoči in zjutraj. V načinu B se energija lahko prerazporedi znotraj bloka 00–06, 06–12, 12–18, 18–24 h (toplotna vztrajnost stavbe).',
+    boiler: 'Zvezno nastavljiva moč do moči grelca; energija mora biti dovedena v oknu.',
+    wash: 'Nepretrgan cikel s konstantno povprečno močjo; začetek mora biti v oknu tako, da se cikel konča v oknu.',
+    dish: 'Kot pralni stroj.',
+    ev: 'Vozilo je priključeno od prihoda do odhoda (okno lahko prečka polnoč). Način A: polnjenje takoj ob prihodu z največjo močjo.'
+  };
+
+  const getP = (path) => path.split('.').reduce((o, k) => o[k], state.p);
+  const setP = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], state.p)[last] = v; };
+
+  function fieldEl(f) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field' + (f.type === 'chk' ? ' check' : '');
+    wrap.dataset.path = f.path;
+    const id = 'f_' + f.path.replace(/\./g, '_');
+    if (f.type === 'chk') {
+      wrap.innerHTML = `<input type="checkbox" id="${id}"><label for="${id}">${f.label}</label>`;
+      const inp = wrap.querySelector('input');
+      inp.checked = !!getP(f.path);
+      inp.addEventListener('change', () => { setP(f.path, inp.checked); onParamChange(f.path); });
+    } else if (f.type === 'sel') {
+      wrap.innerHTML = `<label for="${id}">${f.label}</label><div class="inp"><select id="${id}">${f.options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>`;
+      wrap.style.gridTemplateColumns = '1fr 170px';
+      const s = wrap.querySelector('select'); s.value = getP(f.path);
+      s.addEventListener('change', () => { setP(f.path, s.value); onParamChange(f.path); });
+    } else {
+      wrap.innerHTML = `<label for="${id}">${f.label}</label><div class="inp"><input type="number" id="${id}" min="${f.min}" max="${f.max}" step="${f.step}"><span class="unit">${f.unit}</span></div>` +
+        (f.slider ? `<input type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}">` : '');
+      const n = wrap.querySelector('input[type=number]'), r = wrap.querySelector('input[type=range]');
+      n.value = getP(f.path); if (r) r.value = getP(f.path);
+      const commit = (v, src) => {
+        let x = parseFloat(v); if (!isFinite(x)) return;
+        x = Math.min(f.max, Math.max(f.min, x));
+        setP(f.path, x);
+        if (src !== n) n.value = x; if (r && src !== r) r.value = x;
+        onParamChange(f.path);
+      };
+      n.addEventListener('change', () => commit(n.value, n));
+      if (r) r.addEventListener('input', () => commit(r.value, r));
+    }
+    return wrap;
+  }
+
+  function buildParams() {
+    const root = $('params');
+    root.innerHTML = '<p class="note" style="margin-top:0">Parametri modela. Vrednosti so <b>privzete simulacijske predpostavke</b> za demonstracijo<span class="defaults-tag">demo</span>. Vsaka sprememba takoj preračuna oba načina.</p>';
+    const M = mod();
+    for (const g of SCHEMA) {
+      if (!M.groups.includes(g.key)) continue;
+      const d = document.createElement('details'); d.className = 'pgroup'; d.open = g.open || (state.module === 'bat' && g.key === 'bat') || (state.module === 'load' && g.key === 'grid');
+      d.innerHTML = `<summary><span class="dot" style="background:${g.color}"></span>${g.title}</summary>`;
+      if (g.loads) {
+        H.LOAD_KEYS.filter((k) => M.loads.includes(k)).forEach((k) => {
+          const box = document.createElement('div'); box.className = 'loadbox'; box.dataset.load = k;
+          box.innerHTML = `<h3><span class="sw" style="background:${COL[k]}"></span>${H.LOAD_NAMES[k]}</h3>`;
+          box.appendChild(fieldEl(chk(`loads.${k}.on`, 'Vključen')));
+          LOAD_FIELDS[k].forEach((f) => box.appendChild(fieldEl(f)));
+          const n = document.createElement('p'); n.className = 'note'; n.textContent = LOAD_NOTES[k]; box.appendChild(n);
+          d.appendChild(box);
+        });
+      } else g.fields.forEach((f) => d.appendChild(fieldEl(f)));
+      root.appendChild(d);
+    }
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.style.marginTop = '12px';
+    b.textContent = 'Obnovi privzete vrednosti modula';
+    b.addEventListener('click', () => { const dt = state.p.dt; state.p = H.clone(H.DEFAULTS); mod().preset(state.p); state.p.dt = dt; buildParams(); recompute(); });
+    root.appendChild(b);
+    refreshVisibility();
+  }
+
+  function refreshVisibility() {
+    const all = SCHEMA.flatMap((g) => g.fields || []);
+    all.forEach((f) => {
+      if (!f.show) return;
+      const el = document.querySelector(`.field[data-path="${f.path}"]`);
+      if (el) el.style.display = f.show(state.p) ? '' : 'none';
+    });
+    document.querySelectorAll('.loadbox').forEach((b) => b.classList.toggle('off', !state.p.loads[b.dataset.load].on));
+  }
+
+  function setField(path, v) {
+    const el = document.querySelector(`.field[data-path="${path}"]`); if (!el) return;
+    el.querySelectorAll('input[type=number],input[type=range],select').forEach((i) => { i.value = v; });
+  }
+
+  function onParamChange(path) {
+    const p = state.p;
+    if (path === 'pv.season') {
+      const s = H.SEASONS[p.pv.season];
+      p.pv.sunrise = s.sunrise; p.pv.sunset = s.sunset; p.pv.peak = s.peak;
+      ['pv.sunrise', 'pv.sunset', 'pv.peak'].forEach((q) => setField(q, getP(q)));
+    }
+    if (path === 'pv.sunrise' || path === 'pv.sunset') {
+      if (p.pv.sunset <= p.pv.sunrise + 1) { p.pv.sunset = p.pv.sunrise + 1; setField('pv.sunset', p.pv.sunset); }
+    }
+    if (path === 'bat.socMin' || path === 'bat.socMax') {
+      if (p.bat.socMax <= p.bat.socMin + 1) {
+        if (path === 'bat.socMin') { p.bat.socMax = Math.min(100, p.bat.socMin + 1); setField('bat.socMax', p.bat.socMax); }
+        else { p.bat.socMin = Math.max(0, p.bat.socMax - 1); setField('bat.socMin', p.bat.socMin); }
+      }
+    }
+    if (path === 'loads.ev.s') p.loads.ev.start = p.loads.ev.s;
+    refreshVisibility();
+    recompute();
+  }
+
+  /* ===================== IZRAČUN ===================== */
+  function recompute() {
+    const t0 = performance.now();
+    state.res = H.runBoth(state.p);
+    state.calcMs = performance.now() - t0;
+    const N = state.res.A.N;
+    $('slider').max = N - 1;
+    state.idx = Math.min(state.idx, N - 1);
+    $('slider').value = state.idx;
+    renderStatic();
+    renderStep();
+  }
+  const cur = () => state.res[state.mode];
+  const MODS = window.HEMS_MODULES;
+  const mod = () => MODS.LIST.find((m) => m.id === state.module);
+
+  /* ===================== RISANJE ===================== */
+  function renderStatic() {
+    renderTiles(); renderCharts(); renderCompare(); renderChecks();
+  }
+  function renderStep() {
+    const R = cur(), k = state.idx, dt = R.dt;
+    $('clock').innerHTML = `${H.fmtT(k * dt)}–${H.fmtT((k + 1) * dt)}<small>Čas simulacije · korak ${k + 1}/${R.N} (${dt * 60} min)</small>`;
+    $('slider').value = k;
+    window.HouseScene.update(R, k, state.p, state.mode, H);
+    const ex = MODS.explainStep(R, state.res.A, k, state.p, mod(), state.mode, H);
+    $('explainNow').innerHTML = `<div class="en-h">Kaj se dogaja zdaj · ${H.fmtT(k * dt)}–${H.fmtT((k + 1) * dt)} · ${state.mode === 'A' ? 'način A' : 'način B'}</div>` + ex.map((x) => `<p>${x}</p>`).join('');
+    renderLive(R, k); renderTilesNow(R, k);
+    Object.values(charts).forEach((c) => c.setCursor(k));
+  }
+
+  /* ---------- trenutne vrednosti ob hiši ---------- */
+  function renderLive(R, k) {
+    const items = [
+      ['pv', 'Proizvodnja PV', R.pv[k]], ['base', 'Poraba skupaj', R.load[k]],
+      ['bat', R.ch[k] > 1e-3 ? 'Polnjenje baterije' : 'Praznjenje baterije', R.ch[k] > 1e-3 ? R.ch[k] : R.dis[k]],
+      ['grid', R.imp[k] > 1e-3 ? 'Uvoz iz omrežja' : 'Izvoz v omrežje', R.imp[k] > 1e-3 ? R.imp[k] : R.exp[k]]
+    ];
+    const Mv = mod().vis;
+    const shown = items.filter(([c]) => (c !== 'pv' || Mv.pv) && (c !== 'bat' || Mv.bat));
+    $('live').innerHTML = shown.map(([c, l, v]) => `<div class="lv"><span class="sw" style="background:${COL[c] || COL.load}"></span><span>${l}</span><b class="num">${fmt(v)} kW</b></div>`).join('') +
+      (Mv.bat ? `<div class="lv"><span class="sw" style="background:${COL.bat}"></span><span>SOC baterije</span><b class="num">${R.B.on ? fmt(R.soc[k], 0) + ' %' : '–'}</b></div>` : '');
+  }
+
+  /* ---------- kazalniki ---------- */
+  function renderTiles() {
+    const K = cur().kpi;
+    const T = [
+      ['Proizvedena PV', fmt(K.Epv, 1), 'kWh', 'pv'], ['Porabljena', fmt(K.Eload, 1), 'kWh', 'load'],
+      ['Uvožena', fmt(K.Eimp, 1), 'kWh', 'imp'], ['Izvožena', fmt(K.Eexp, 1), 'kWh', 'exp'],
+      ['Ocenjeni dnevni strošek', fmt(K.cost, 2), '€', 'cost'], ['Delež lastne porabe PV', fmt(100 * K.selfCons, 1), '%', 'sc'],
+      ['Stopnja samooskrbe', fmt(100 * K.selfSuff, 1), '%', 'ss']
+    ];
+    $('tiles').innerHTML = T.map(([l, v, u, id]) => `<div class="tile"><div class="lab">${l}</div><div class="val">${v}<small>${u}</small></div><div class="now" id="now_${id}"></div></div>`).join('');
+    $('kpiSub').textContent = `${state.mode === 'A' ? 'Način A' : 'Način B'} · celoten dan (izračunano iz časovnih profilov, Σ P·Δt) · spodaj: vrednost do trenutnega časa`;
+  }
+  function renderTilesNow(R, k) {
+    const dt = R.dt; let pv = 0, l = 0, im = 0, ex = 0, c = 0, cu = 0;
+    for (let t = 0; t <= k; t++) { pv += R.pv[t] * dt; l += R.load[t] * dt; im += R.imp[t] * dt; ex += R.exp[t] * dt; cu += R.curt[t] * dt; c += (R.buy[t] * R.imp[t] - R.sell[t] * R.exp[t]) * dt; }
+    const set = (id, txt) => { const e = $('now_' + id); if (e) e.textContent = txt; };
+    set('pv', `do zdaj ${fmt(pv, 1)} kWh`); set('load', `do zdaj ${fmt(l, 1)} kWh`); set('imp', `do zdaj ${fmt(im, 1)} kWh`);
+    set('exp', `do zdaj ${fmt(ex, 1)} kWh`); set('cost', `do zdaj ${fmt(c, 2)} €`);
+    set('sc', pv > 1e-6 ? `do zdaj ${fmt(100 * (pv - ex - cu) / pv, 1)} %` : 'do zdaj –');
+    set('ss', l > 1e-6 ? `do zdaj ${fmt(100 * Math.max(0, 1 - im / l), 1)} %` : 'do zdaj –');
+  }
+
+  /* ===================== GRAFI (canvas, brez knjižnic) ===================== */
+  const charts = {};
+  function makeChart(el, cfg) {
+    el.innerHTML = `<div class="ct">${cfg.title}</div><div class="legend"></div><canvas height="${cfg.height || 210}"></canvas><div class="tip"></div>`;
+    const cv = el.querySelector('canvas'), tip = el.querySelector('.tip');
+    const ch = { el, cv, tip, cfg, cursor: 0, hover: -1 };
+    ch.setData = (c) => { ch.cfg = Object.assign(ch.cfg, c); legend(ch); draw(ch); };
+    ch.setCursor = (k) => { ch.cursor = k; draw(ch); };
+    cv.addEventListener('mousemove', (e) => { ch.hover = idxAt(ch, e); draw(ch); showTip(ch, e); });
+    cv.addEventListener('mouseleave', () => { ch.hover = -1; tip.style.display = 'none'; draw(ch); });
+    cv.addEventListener('click', (e) => { const i = idxAt(ch, e); if (i >= 0) seek(i); });
+    return ch;
+  }
+  const PAD = { l: 46, r: 12, t: 8, b: 26 };
+  function idxAt(ch, e) {
+    const r = ch.cv.getBoundingClientRect(); const x = e.clientX - r.left;
+    const w = r.width - PAD.l - PAD.r; const N = ch.cfg.N;
+    if (x < PAD.l || x > PAD.l + w) return -1;
+    return Math.min(N - 1, Math.max(0, Math.floor((x - PAD.l) / w * N)));
+  }
+  function legend(ch) {
+    ch.el.querySelector('.legend').innerHTML = ch.cfg.series.filter((s) => !s.noLegend).map((s) =>
+      `<span><i class="${s.kind === 'stack' || s.kind === 'area' ? 'blk' : ''}" style="background:${s.color}${s.dash ? ';background:repeating-linear-gradient(90deg,' + s.color + ' 0 4px,transparent 4px 7px)' : ''}"></i>${s.name}</span>`).join('');
+  }
+  function niceTicks(min, max, n = 5) {
+    const span = max - min || 1; const step0 = span / n; const mag = 10 ** Math.floor(Math.log10(step0));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= step0) || mag * 10;
+    const t = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) t.push(+v.toFixed(10));
+    return { t, step };
+  }
+  function draw(ch) {
+    const { cv, cfg } = ch; if (!cfg.series) return;
+    const dpr = window.devicePixelRatio || 1; const cssW = cv.clientWidth || 600; const cssH = cfg.height || 210;
+    cv.width = cssW * dpr; cv.height = cssH * dpr; cv.style.height = cssH + 'px';
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cssW, cssH);
+    const N = cfg.N, w = cssW - PAD.l - PAD.r, h = cssH - PAD.t - PAD.b;
+    // obseg y
+    let lo = cfg.yMin ?? Infinity, hi = cfg.yMax ?? -Infinity;
+    if (cfg.yMin === undefined || cfg.yMax === undefined) {
+      const stackTop = new Array(N).fill(0);
+      cfg.series.forEach((s) => {
+        if (s.kind === 'stack') s.data.forEach((v, i) => { stackTop[i] += v; });
+        else s.data.forEach((v) => { if (cfg.yMin === undefined) lo = Math.min(lo, v); if (cfg.yMax === undefined) hi = Math.max(hi, v); });
+      });
+      if (cfg.series.some((s) => s.kind === 'stack')) { if (cfg.yMax === undefined) hi = Math.max(hi, ...stackTop); if (cfg.yMin === undefined) lo = Math.min(lo, 0); }
+      if (cfg.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+      if (!isFinite(lo)) lo = 0; if (!isFinite(hi)) hi = 1;
+      if (!(hi > lo)) { hi = lo + 1; }
+      const pad = (hi - lo) * 0.06; if (cfg.yMax === undefined) hi += pad; if (cfg.yMin === undefined && lo < 0) lo -= pad;
+    }
+    const { t: ticks } = niceTicks(lo, hi, 4);
+    if (cfg.yMin === undefined && ticks.length) lo = Math.min(lo, ticks[0]);
+    const X = (i) => PAD.l + i / N * w, Y = (v) => PAD.t + (hi - v) / (hi - lo) * h;
+    // mreža
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = '#7a7873'; g.strokeStyle = '#ecebe7'; g.lineWidth = 1;
+    ticks.forEach((v) => { const y = Math.round(Y(v)) + 0.5; g.beginPath(); g.moveTo(PAD.l, y); g.lineTo(PAD.l + w, y); g.stroke(); g.textAlign = 'right'; g.fillText(fmtAxis(v, cfg), PAD.l - 6, y + 4); });
+    g.textAlign = 'center';
+    for (let hr = 0; hr <= 24; hr += 3) { const x = PAD.l + hr / 24 * w; g.fillText(String(hr).padStart(2, '0') + '.00', x, cssH - 8); g.beginPath(); g.moveTo(Math.round(x) + 0.5, PAD.t + h); g.lineTo(Math.round(x) + 0.5, PAD.t + h + 4); g.strokeStyle = '#c9c7c1'; g.stroke(); }
+    // kazalec
+    const k = ch.cursor; g.fillStyle = 'rgba(11,11,11,0.07)'; g.fillRect(X(k), PAD.t, Math.max(2, w / N), h);
+    if (ch.hover >= 0) { g.fillStyle = 'rgba(11,11,11,0.04)'; g.fillRect(X(ch.hover), PAD.t, Math.max(2, w / N), h); }
+    // ničelna črta
+    if (lo < 0 && hi > 0) { g.strokeStyle = '#9a9893'; g.lineWidth = 1; g.beginPath(); g.moveTo(PAD.l, Math.round(Y(0)) + 0.5); g.lineTo(PAD.l + w, Math.round(Y(0)) + 0.5); g.stroke(); }
+    (cfg.guides || []).forEach((gd) => { g.setLineDash([4, 4]); g.strokeStyle = '#9a9893'; g.beginPath(); g.moveTo(PAD.l, Y(gd.y)); g.lineTo(PAD.l + w, Y(gd.y)); g.stroke(); g.setLineDash([]); g.fillStyle = '#7a7873'; g.textAlign = 'left'; g.fillText(gd.label, PAD.l + 4, Y(gd.y) - 4); });
+    // nizi
+    const base = new Array(N).fill(0);
+    cfg.series.forEach((s) => {
+      if (s.kind === 'stack') {
+        g.fillStyle = s.color; g.strokeStyle = '#fcfcfb'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(X(0), Y(base[0]));
+        for (let i = 0; i < N; i++) { g.lineTo(X(i), Y(base[i] + s.data[i])); g.lineTo(X(i + 1), Y(base[i] + s.data[i])); }
+        for (let i = N - 1; i >= 0; i--) { g.lineTo(X(i + 1), Y(base[i])); g.lineTo(X(i), Y(base[i])); }
+        g.closePath(); g.fill(); g.stroke();
+        for (let i = 0; i < N; i++) base[i] += s.data[i];
+      } else if (s.kind === 'area') {
+        g.fillStyle = hexA(s.color, 0.28); g.beginPath(); g.moveTo(X(0), Y(0));
+        for (let i = 0; i < N; i++) { g.lineTo(X(i), Y(s.data[i])); g.lineTo(X(i + 1), Y(s.data[i])); }
+        g.lineTo(X(N), Y(0)); g.closePath(); g.fill();
+        stepLine(g, s, X, Y, N);
+      } else if (s.kind === 'line') { // točke na koncu korakov (stanje, npr. SOC)
+        g.strokeStyle = s.color; g.lineWidth = 2; g.setLineDash(s.dash ? [5, 4] : []); g.beginPath();
+        g.moveTo(X(0), Y(s.start)); for (let i = 0; i < N; i++) g.lineTo(X(i + 1), Y(s.data[i])); g.stroke(); g.setLineDash([]);
+      } else stepLine(g, s, X, Y, N);
+    });
+  }
+  function stepLine(g, s, X, Y, N) {
+    g.strokeStyle = s.color; g.lineWidth = 2; g.setLineDash(s.dash ? [5, 4] : []); g.lineJoin = 'round'; g.beginPath();
+    for (let i = 0; i < N; i++) { if (i === 0) g.moveTo(X(0), Y(s.data[0])); else g.lineTo(X(i), Y(s.data[i])); g.lineTo(X(i + 1), Y(s.data[i])); }
+    g.stroke(); g.setLineDash([]);
+  }
+  function fmtAxis(v, cfg) { return (cfg.axisFmt ? cfg.axisFmt(v) : fmt(v, Math.abs(v) < 1 && v !== 0 ? 2 : 0)); }
+  function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+  function showTip(ch, e) {
+    const i = ch.hover; if (i < 0) { ch.tip.style.display = 'none'; return; }
+    const dt = 24 / ch.cfg.N;
+    let html = `<div class="th">${H.fmtT(i * dt)}–${H.fmtT((i + 1) * dt)}</div>`;
+    ch.cfg.series.filter((s) => !s.noTip).forEach((s) => { html += `<div class="tr"><span><i style="background:${s.color}"></i>${s.name}</span><span>${fmt(s.data[i], ch.cfg.tipDec ?? 2)} ${ch.cfg.unit}</span></div>`; });
+    ch.tip.innerHTML = html; ch.tip.style.display = 'block';
+    const r = ch.el.getBoundingClientRect(); let x = e.clientX - r.left + 14; const y = e.clientY - r.top + 10;
+    if (x + ch.tip.offsetWidth > r.width) x = e.clientX - r.left - ch.tip.offsetWidth - 14;
+    ch.tip.style.left = x + 'px'; ch.tip.style.top = y + 'px';
+  }
+
+  function renderCharts() {
+    const R = cur(), N = R.N, p = state.p;
+    if (!charts.power) {
+      charts.power = makeChart($('chPower'), { title: 'Moči [kW] – baterija: + praznjenje / − polnjenje; omrežje: + uvoz / − izvoz', unit: 'kW', zero: true });
+      charts.soc = makeChart($('chSoc'), { title: 'Stanje napolnjenosti baterije SOC [%] (na koncu koraka)', unit: '%', yMin: 0, yMax: 100, tipDec: 1 });
+      charts.loads = makeChart($('chLoads'), { title: 'Razpored porabnikov [kW] (zloženo)', unit: 'kW' });
+      charts.price = makeChart($('chPrice'), { title: 'Cena elektrike [€/kWh]', unit: '€/kWh', tipDec: 3, yMin: 0, axisFmt: (v) => fmt(v, 2) });
+      charts.cost = makeChart($('chCost'), { title: 'Kumulativni strošek [€] – A proti B', unit: '€', zero: true, height: 190 });
+      charts.socAB = makeChart($('chSocAB'), { title: 'SOC baterije [%] – A proti B', unit: '%', yMin: 0, yMax: 100, tipDec: 1, height: 190 });
+    }
+    charts.power.setData({ N, series: [
+      { name: 'Proizvodnja PV', color: COL.pv, data: R.pv, kind: 'area' },
+      { name: 'Poraba', color: COL.load, data: R.load },
+      { name: 'Baterija', color: COL.bat, data: R.dis.map((d, i) => d - R.ch[i]) },
+      { name: 'Omrežje', color: COL.grid, data: R.imp.map((v, i) => v - R.exp[i]) }
+    ] });
+    charts.soc.setData({ N, guides: R.B.on ? [{ y: p.bat.socMin, label: `SOC_min ${p.bat.socMin} %` }, { y: p.bat.socMax, label: `SOC_max ${p.bat.socMax} %` }] : [],
+      series: [{ name: R.B.on ? 'SOC' : 'SOC (baterija izključena)', color: COL.bat, data: R.soc, start: R.socStart, kind: 'line' }] });
+    charts.loads.setData({ N, series: H.LOAD_KEYS.filter((k) => p.loads[k].on).map((k) => ({ name: H.LOAD_NAMES[k], color: COL[k], data: R.sched[k], kind: 'stack' })) });
+    charts.price.setData({ N, series: [{ name: 'Nakupna cena', color: COL.buy, data: R.buy }, { name: 'Odkupna cena', color: COL.sell, data: R.sell }] });
+    const cum = (X) => { let c = 0; return X.imp.map((v, i) => (c += (X.buy[i] * v - X.sell[i] * X.exp[i]) * X.dt)); };
+    const A = state.res.A, B = state.res.B;
+    charts.cost.setData({ N, series: [{ name: 'Način A', color: COL.A, data: cum(A), start: 0, kind: 'line' }, { name: 'Način B', color: COL.B, data: cum(B), start: 0, kind: 'line' }] });
+    charts.socAB.setData({ N, series: [{ name: 'Način A', color: COL.A, data: A.soc, start: A.socStart, kind: 'line' }, { name: 'Način B', color: COL.B, data: B.soc, start: B.socStart, kind: 'line' }] });
+  }
+
+  /* ---------- primerjava ---------- */
+  function renderCompare() {
+    const A = state.res.A, B = state.res.B, a = A.kpi, b = B.kpi, dt = A.dt;
+    const st = (R, k) => (R.sched[k + 'Start'] !== undefined ? H.fmtT(R.sched[k + 'Start'] * dt) : '–');
+    // [oznaka, A, B, decimalke, enota, smer: -1 manjše je boljše, +1 večje je boljše, 0 nevtralno]
+    const rows = [
+      ['Skupni strošek elektrike', a.cost, b.cost, 2, '€', -1],
+      ['Strošek, korigiran za spremembo energije v bateriji*', a.costAdj, b.costAdj, 2, '€', -1],
+      ['Energija, kupljena iz omrežja', a.Eimp, b.Eimp, 2, 'kWh', -1],
+      ['Energija, oddana v omrežje', a.Eexp, b.Eexp, 2, 'kWh', 0],
+      ['Skupna proizvodnja PV', a.Epv, b.Epv, 2, 'kWh', 0],
+      ['Omejena (neizkoriščena) PV', a.Ecurt, b.Ecurt, 2, 'kWh', -1],
+      ['Skupna poraba', a.Eload, b.Eload, 2, 'kWh', 0],
+      ['Lastna poraba PV', a.Epv - a.Eexp - a.Ecurt, b.Epv - b.Eexp - b.Ecurt, 2, 'kWh', 1],
+      ['Delež lastne porabe PV', 100 * a.selfCons, 100 * b.selfCons, 1, '%', 1],
+      ['Stopnja samooskrbe', 100 * a.selfSuff, 100 * b.selfSuff, 1, '%', 1],
+      ['Minimalni SOC baterije', a.socMin, b.socMin, 1, '%', 0],
+      ['Maksimalni SOC baterije', a.socMax, b.socMax, 1, '%', 0],
+      ['Končni SOC baterije', a.socEnd, b.socEnd, 1, '%', 0],
+      ['Največja moč uvoza', a.peakImp, b.peakImp, 2, 'kW', -1],
+      ['Izgube v bateriji', a.losses, b.losses, 2, 'kWh', 0],
+      ['Neizpolnjene zahteve porabnikov', a.unmet, b.unmet, 2, 'kWh', -1]
+    ];
+    let html = '<thead><tr><th>Kazalnik</th><th>Način A</th><th>Način B</th><th>B − A</th></tr></thead><tbody>';
+    rows.forEach(([l, va, vb, d, u, dir]) => {
+      const diff = vb - va; const nan = !isFinite(va) || !isFinite(vb);
+      const cls = nan || dir === 0 || Math.abs(diff) < 10 ** -d / 2 ? '' : (diff * dir > 0 ? 'better' : 'worse');
+      html += `<tr><td>${l}</td><td>${nan ? '–' : fmt(va, d) + ' ' + u}</td><td>${nan ? '–' : fmt(vb, d) + ' ' + u}</td><td class="${cls}">${nan ? '–' : (diff > 0 ? '+' : '') + fmt(diff, d) + ' ' + u}</td></tr>`;
+    });
+    html += `<tr><td>Začetek pralnega / pomivalnega stroja</td><td>${st(A, 'wash')} / ${st(A, 'dish')}</td><td>${st(B, 'wash')} / ${st(B, 'dish')}</td><td></td></tr></tbody>`;
+    $('cmpTable').innerHTML = html;
+    const save = a.cost - b.cost;
+    $('cmpNote').innerHTML = `Pri enakih vhodnih podatkih način B zniža dnevni strošek za <b>${fmt(save, 2)} €</b> (${a.cost !== 0 ? fmt(100 * save / Math.abs(a.cost), 1) : '–'} %). ` +
+      `*Korigiran strošek = strošek − ΔE<sub>bat</sub> · povprečna nakupna cena (${fmt(a.pRef, 3)} €/kWh); izenači primerjavo, kadar se načina končata z različno energijo v bateriji. ` +
+      `Zelena/rdeča barva v stolpcu B − A označuje izboljšanje/poslabšanje. Izračun obeh načinov: ${fmt(state.calcMs, 0)} ms.`;
+  }
+
+  /* ---------- preverjanje ---------- */
+  function renderChecks() {
+    const li = (c) => `<li class="${c.ok ? 'ok' : 'bad'}"><span class="ic">${c.ok ? '✓' : '✗'}</span><span>${c.label}<div class="d">${c.detail}</div></span></li>`;
+    $('checksA').innerHTML = state.res.A.checks.map(li).join('');
+    $('checksB').innerHTML = state.res.B.checks.map(li).join('');
+  }
+
+  /* ===================== ČASOVNA OS ===================== */
+  function seek(i) { state.idx = i; renderStep(); }
+  function play() {
+    if (state.timer) { stop(); return; }
+    const R = cur(); if (state.idx >= R.N - 1) state.idx = 0;
+    state.finishedShown = false;
+    $('play').textContent = '❚❚ Ustavi';
+    const tick = () => {
+      const N = cur().N;
+      if (state.idx >= N - 1) { stop(); showSummary(); return; }
+      state.idx++; renderStep();
+    };
+    state.timer = setInterval(tick, 1000 / parseFloat($('speed').value));
+  }
+  function stop() { clearInterval(state.timer); state.timer = null; $('play').textContent = '▶ Začni'; }
+
+  function showSummary() {
+    const R = cur(), K = R.kpi; const allOk = R.checks.every((c) => c.ok);
+    const balPV = K.Epv - K.Ecurt + K.Eimp + K.Edis, balUse = K.Eload + K.Ech + K.Eexp;
+    $('modalTitle').textContent = `Dnevni povzetek – ${state.mode === 'A' ? 'način A (osnovno upravljanje)' : 'način B (pametno upravljanje HEMS)'}`;
+    $('modalBody').innerHTML =
+      `<table class="cmp"><tbody>
+        <tr><td>Proizvedena PV energija</td><td>${fmt(K.Epv)} kWh</td></tr>
+        <tr><td>Porabljena energija</td><td>${fmt(K.Eload)} kWh</td></tr>
+        <tr><td>Uvožena / izvožena energija</td><td>${fmt(K.Eimp)} / ${fmt(K.Eexp)} kWh</td></tr>
+        <tr><td>Polnjenje / praznjenje baterije</td><td>${fmt(K.Ech)} / ${fmt(K.Edis)} kWh</td></tr>
+        <tr><td>Strošek nakupa − prihodek oddaje</td><td>${fmt(K.costImp)} − ${fmt(K.revExp)} = <b>${fmt(K.cost)} €</b></td></tr>
+        <tr><td>Lastna poraba PV / samooskrba</td><td>${pct(K.selfCons)} / ${pct(K.selfSuff)}</td></tr>
+        <tr><td><b>Dnevna energijska bilanca</b><br><span class="note">E_PV − E_omej + E_uvoz + E_praz = E_poraba + E_pol + E_izvoz</span></td><td>${fmt(balPV, 3)} = ${fmt(balUse, 3)} kWh</td></tr>
+      </tbody></table>
+      <p style="margin-top:10px">Preverjanje pravilnosti: <span class="pill ${allOk ? 'ok' : 'bad'}">${allOk ? 'vsi testi uspešni' : 'nekateri testi niso uspešni'}</span>
+      (${R.checks.filter((c) => c.ok).length}/${R.checks.length})</p>
+      <ul class="note">${R.checks.filter((c) => !c.ok).map((c) => `<li>${c.label}: ${c.detail}</li>`).join('')}</ul>`;
+    $('modal').classList.add('show');
+  }
+
+  /* ===================== DOKUMENTACIJA ===================== */
+  function renderDocs() {
+    $('docs').innerHTML = `
+<header><h2>Navodila, enačbe in stanje implementacije</h2></header>
+<details open><summary>Kratka navodila za uporabo</summary>
+<ol>
+<li>Na levi nastavite parametre PV, baterije, omrežja in porabnikov. Vsaka sprememba takoj preračuna <b>oba</b> načina.</li>
+<li>Zgoraj desno izberite, kateri način prikazujejo diagram, trenutno stanje, kazalniki in grafi (A ali B). Primerjalna tabela vedno prikazuje oba.</li>
+<li>Z gumbom <b>▶ Začni</b> zaženete simulacijo dneva, z drsnikom ali klikom na graf skočite na poljuben čas, z <b>↺ Ponastavi</b> se vrnete na 00.00. Korak (15/30/60 min) in hitrost izberete v časovni vrstici.</li>
+<li>Ob koncu dneva se odpre <b>dnevni povzetek</b> z energijsko bilanco in rezultati preverjanja.</li>
+<li>Za predstavitev: povečajte/zmanjšajte PV, kapaciteto baterije, ceno VT/MT ali okno polnjenja EV in opazujte, kako se spremenijo tokovi, razpored porabnikov in strošek.</li>
+</ol></details>
+<details><summary>Uporabljene enačbe (prototip)</summary>
+<p><b>PV-proizvodnja</b> (povprečje znotraj koraka):</p>
+<div class="eq">P<sub>PV</sub>(t) = P<sub>n</sub> · f<sub>obs</sub> · k<sub>vrh</sub> · sin²(π · (t − t<sub>vzhod</sub>) / (t<sub>zahod</sub> − t<sub>vzhod</sub>)), za t<sub>vzhod</sub> &lt; t &lt; t<sub>zahod</sub></div>
+<p><b>Energijska bilanca</b> v vsakem koraku t:</p>
+<div class="eq">P<sub>PV,t</sub> − P<sub>omej,t</sub> + P<sub>uvoz,t</sub> + P<sub>praz,t</sub> = P<sub>poraba,t</sub> + P<sub>pol,t</sub> + P<sub>izvoz,t</sub></div>
+<p><b>Baterija</b> (energija na koncu koraka, izkoristka η<sub>c</sub>, η<sub>p</sub>):</p>
+<div class="eq">E<sub>t</sub> = E<sub>t−1</sub> + η<sub>c</sub> · P<sub>pol,t</sub> · Δt − P<sub>praz,t</sub> · Δt / η<sub>p</sub>,  SOC<sub>min</sub>·C ≤ E<sub>t</sub> ≤ SOC<sub>max</sub>·C,  P<sub>pol,t</sub> ≤ P<sub>pol,max</sub>,  P<sub>praz,t</sub> ≤ P<sub>praz,max</sub></div>
+<p><b>Strošek in kazalniki</b> (vse vsote iz časovnih profilov):</p>
+<div class="eq">C = Σ<sub>t</sub> (c<sub>nak,t</sub> · P<sub>uvoz,t</sub> − c<sub>odk,t</sub> · P<sub>izvoz,t</sub>) · Δt</div>
+<div class="eq">delež lastne porabe PV = (E<sub>PV</sub> − E<sub>izvoz</sub> − E<sub>omej</sub>) / E<sub>PV</sub>;  samooskrba = 1 − E<sub>uvoz</sub> / E<sub>poraba</sub></div>
+<div class="eq">C<sub>kor</sub> = C − (E<sub>konec</sub> − E<sub>začetek</sub>) · c̄<sub>nak</sub></div>
+<p>Samooskrba je definirana konzervativno: energija, ki jo baterija prejme iz omrežja, šteje kot uvoz.</p>
+<p><b>Način A – pravila:</b> PV najprej pokrije porabo; presežek polni baterijo (do P<sub>pol,max</sub> in SOC<sub>max</sub>), ostanek gre v omrežje (nad P<sub>izvoz,max</sub> se PV omeji). Ob primanjkljaju se najprej prazni baterija (do P<sub>praz,max</sub> in SOC<sub>min</sub>), preostanek se kupi iz omrežja. Porabniki delujejo ob nastavljenih časih.</p>
+<p><b>Način B – pametno upravljanje (HEVRISTIKA, ne MILP):</b> HEMS pozna (popolna napoved) PV-profil, porabo in cene za cel dan.</p>
+<ol>
+<li>Za vsak korak določi efektivno mejno ceno energije: odkupno ceno, če je na voljo prebitek PV, sicer nakupno ceno.</li>
+<li>Zvezne prilagodljive porabnike (EV, toplotna črpalka v 6-urnih blokih, bojler) po delih (≈0,05 kWh) razporedi v korake z najnižjo efektivno ceno znotraj dovoljenega okna in do največje moči (požrešni algoritem).</li>
+<li>Za nepretrgana cikla pralnega in pomivalnega stroja preveri vse dovoljene začetke in izbere najcenejšega.</li>
+<li>Pri tako določenem odjemu baterijo vodi z <b>dinamičnim programiranjem</b> po diskretiziranem SOC (≈600 stanj): V<sub>t</sub>(E) = min<sub>E'</sub> [c<sub>t</sub>(E, E') + V<sub>t+1</sub>(E')], z omejitvami moči, SOC, izkoristkov, priključne moči, brez oddaje baterije v omrežje in (privzeto) s pogojem E<sub>konec</sub> ≥ E<sub>začetek</sub>.</li>
+</ol>
+<p>Korak 4 je optimalen le za podproblem baterije pri že izbranem razporedu porabnikov (do diskretizacije); celotna metoda je zaporedna dekompozicija in <b>ni dokazano optimalna</b>.</p>
+</details>
+<details><summary>MILP-formulacija in preverjanje hevristike</summary>
+<p>Referenčni MILP (ločena skripta <code>milp_preverjanje.py</code>, scipy.optimize.milp/HiGHS, ne teče v brskalniku) na istih vhodnih podatkih minimizira</p>
+<div class="eq">min Σ<sub>t</sub> (c<sub>nak,t</sub> P<sub>uvoz,t</sub> − c<sub>odk,t</sub> P<sub>izvoz,t</sub>) Δt</div>
+<p>ob bilanci, enačbi SOC, mejah moči in SOC ter binarnih spremenljivkah: u<sub>c,t</sub> + u<sub>d,t</sub> ≤ 1 (ni hkratnega polnjenja in praznjenja), P<sub>uvoz,t</sub> ≤ P<sub>uvoz,max</sub> u<sub>g,t</sub>, P<sub>izvoz,t</sub> ≤ P<sub>izvoz,max</sub>(1 − u<sub>g,t</sub>) (ni hkratnega uvoza in izvoza), P<sub>izvoz,t</sub> ≤ P<sub>izvoz,max</sub>(1 − u<sub>d,t</sub>) (baterija ne oddaja v omrežje), energijskih zahtevah EV, bojlerja in TČ v oknih ter Σ<sub>s</sub> x<sub>m,s</sub> = 1 za začetek vsakega nepretrganega cikla (x ∈ {0,1}).</p>
+<p>Rezultat preverjanja, izveden 29. 10. 2026 (dnevni strošek, korak 15 min, če ni navedeno drugače):</p>
+<table><thead><tr><th>Primer</th><th>MILP-optimum</th><th>Hevristika B</th><th>Odstopanje</th><th>Način A</th></tr></thead><tbody>
+<tr><td>Privzeti parametri</td><td>1,477 €</td><td>1,489 €</td><td>+0,8 %</td><td>2,990 €</td></tr>
+<tr><td>Poletje, dinamične cene</td><td>1,084 €</td><td>1,154 €</td><td>+6,5 %</td><td>3,828 €</td></tr>
+<tr><td>Zima, dvotarifno, korak 60 min</td><td>2,877 €</td><td>2,900 €</td><td>+0,8 %</td><td>4,191 €</td></tr>
+<tr><td>Brez baterije</td><td>2,126 €</td><td>2,126 €</td><td>0,0 %</td><td>4,538 €</td></tr>
+<tr><td>PV 10 kWp, baterija 5 kWh / 2,5 kW</td><td>0,505 €</td><td>0,511 €</td><td>+1,1 %</td><td>2,446 €</td></tr>
+</tbody></table>
+<p>Vrednosti veljajo le za navedene primere; pri drugih parametrih je odstopanje lahko drugačno.</p>
+</details>
+<details><summary>Stanje implementacije</summary>
+<p><b>V celoti implementirano:</b> dnevna simulacija 00.00–24.00 s korakom 15/30/60 min; PV z nastavljivo močjo, profilom in faktorjem obsevanja; baterija z mejami SOC, močmi in izkoristki; nakup in oddaja z dvotarifnimi ali dinamičnimi cenami ter mejo priključne moči; šest porabnikov z vklopom/izklopom, močjo/energijo in časovnimi okni; načina A in B; animiran diagram tokov s smerjo glede na stanje; grafi, kazalniki, primerjava in samodejno preverjanje bilance.</p>
+<p><b>Poenostavljeno:</b> PV je sintetična krivulja (brez vremenskih podatkov, temperature modulov, oblakov znotraj dneva); toplotna črpalka nima toplotnega modela stavbe in COP – njena prilagodljivost je predstavljena s prerazporeditvijo energije znotraj 6-urnih blokov; bojler nima temperaturnega modela rezervoarja; stroja imata konstantno povprečno moč cikla; EV je modeliran kot potrebna energija v oknu priključitve (brez V2H); cene so demonstracijske; napoved je popolna (ni negotovosti); način B je hevristika, MILP je le v zunanji preverjalni skripti; degradacija baterije ni upoštevana.</p>
+<p><b>Za povezavo z dejanskimi napravami bi potrebovali:</b> meritve v realnem času (pametni števec, npr. P1/DLMS, Modbus TCP iz razsmernika in baterije); krmilne vmesnike (SunSpec/Modbus za razsmernik in baterijo, OCPP ali EEBus za polnilnico EV, SG-Ready ali proizvajalčev API za toplotno črpalko, pametna stikala/MQTT za bojler in stroje); napoved PV in porabe (vremenski podatki, zgodovina) ter cen (borza, dobavitelj); ponavljajoče se načrtovanje z drsečim horizontom (MPC) in varnostne omejitve (prioriteta udobja, ročni preklop, zaščita naprav); kibernetsko varnost in zaščito podatkov.</p>
+</details>`;
+  }
+
+  /* ===================== ZAGON ===================== */
+  function init() {
+    window.HouseScene.build($('scene'));
+    renderDocs();
+    $('dt').value = String(state.p.dt);
+    $('modeA').addEventListener('click', () => setMode('A'));
+    $('modeB').addEventListener('click', () => setMode('B'));
+    $('play').addEventListener('click', play);
+    $('reset').addEventListener('click', () => { stop(); state.idx = 0; renderStep(); });
+    $('slider').addEventListener('input', (e) => { seek(parseInt(e.target.value, 10)); });
+    $('dt').addEventListener('change', (e) => {
+      const tNow = state.idx * state.p.dt; state.p.dt = parseFloat(e.target.value);
+      state.idx = Math.floor(tNow / state.p.dt + 1e-9); recompute();
+    });
+    $('speed').addEventListener('change', () => { if (state.timer) { stop(); play(); } });
+    $('modalClose').addEventListener('click', () => $('modal').classList.remove('show'));
+    $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') $('modal').classList.remove('show'); });
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      if (e.key === ' ') { e.preventDefault(); play(); }
+      if (e.key === 'ArrowRight') seek(Math.min(cur().N - 1, state.idx + 1));
+      if (e.key === 'ArrowLeft') seek(Math.max(0, state.idx - 1));
+      if (e.key === 'Escape') $('modal').classList.remove('show');
+    });
+    let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => Object.values(charts).forEach((c) => c.setCursor(state.idx)), 120); });
+    state.idx = Math.round(12 / state.p.dt); // začnemo opoldne, da je diagram takoj zanimiv
+    const hm = /modul=(\d)/.exec(location.hash || '');
+    const start = hm ? (MODS.LIST.find((m) => String(m.n) === hm[1]) || MODS.LIST[0]).id : 'pv';
+    switchModule(start, true);
+  }
+  function renderModuleBar() {
+    $('modBar').innerHTML = MODS.LIST.map((m) => `<button type="button" class="modbtn ${m.id === state.module ? 'active' : ''}" data-id="${m.id}"><span class="mn">${m.n}</span><span><b>${m.title}</b><small>${m.sub}</small></span></button>`).join('<span class="modarrow">→</span>');
+    $('modBar').querySelectorAll('.modbtn').forEach((b) => b.addEventListener('click', () => switchModule(b.dataset.id)));
+  }
+  function renderModuleInfo() {
+    const M = mod(), I = M.info;
+    $('modInfo').innerHTML = `<header><h2>Modul ${M.n}: ${M.title}</h2><span class="sub">${M.sub} · razlaga in poskusi</span></header>
+      <div class="mi-grid">
+        <div><h3>Cilj</h3><p>${I.cilj}</p><h3>Kako deluje</h3>${I.kako}</div>
+        <div><h3>Enačbe</h3>${I.enacbe.map((e) => `<div class="eq">${e}</div>`).join('')}
+          <h3>Povezava z viri</h3><p class="src">${I.viri}</p></div>
+        <div><h3>Poskusi v simulatorju</h3><ol>${I.poskusi.map((x) => `<li>${x}</li>`).join('')}</ol>
+          <h3>Vprašanja za razumevanje</h3><ul>${I.vprasanja.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+      </div>`;
+  }
+  function switchModule(id, initial) {
+    if (!initial) state.modParams[state.module] = H.clone(state.p);
+    const dt = state.p.dt;
+    state.module = id;
+    if (state.modParams[id]) state.p = state.modParams[id];
+    else { state.p = H.clone(H.DEFAULTS); mod().preset(state.p); }
+    state.p.dt = dt;
+    const M = mod();
+    const vis = { pv: M.vis.pv, bat: M.vis.bat };
+    H.LOAD_KEYS.forEach((k) => { vis[k] = M.loads.includes(k); });
+    window.HouseScene.setVisible(vis);
+    try { history.replaceState(null, '', '#modul=' + M.n); } catch (e) { /* lokalna datoteka */ }
+    renderModuleBar(); renderModuleInfo(); buildParams(); recompute();
+  }
+  function setMode(m) {
+    state.mode = m;
+    $('modeA').classList.toggle('active', m === 'A'); $('modeB').classList.toggle('active', m === 'B');
+    renderStatic(); renderStep();
+  }
+  window.HEMS_APP = { state, recompute, setMode, seek, showSummary, switchModule };
+  init();
+})();
+
+</script>
+</body>
+</html>
